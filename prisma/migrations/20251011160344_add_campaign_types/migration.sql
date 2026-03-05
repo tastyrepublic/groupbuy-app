@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "public"."Campaign" ADD COLUMN     "countingMethod" TEXT NOT NULL DEFAULT 'PARTICIPANT',
+ADD COLUMN     "scope" TEXT NOT NULL DEFAULT 'PRODUCT';

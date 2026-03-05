@@ -1,0 +1,40 @@
+# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+
+client_id = "3c6ebbadf8d232f4e854913cc9af9362"
+name = "groupbuy-app"
+application_url = "https://traditional-happening-alex-ccd.trycloudflare.com"
+embedded = true
+handle = "groupbuy-app-2"
+
+[build]
+automatically_update_urls_on_dev = true
+
+[webhooks]
+api_version = "2025-07"
+
+  [[webhooks.subscriptions]]
+  topics = [ "orders/create" ]
+  uri = "pubsub://groupbuy-app-472319:shopify-orders-create"
+
+  [[webhooks.subscriptions]]
+  topics = [ "app/uninstalled" ]
+  uri = "/webhooks/app/uninstalled"
+
+  [[webhooks.subscriptions]]
+  topics = [ "app/scopes_update" ]
+  uri = "/webhooks/app/scopes_update"
+
+[app_proxy]
+url = "https://placeholder.com/api"
+subpath = "gbs"
+prefix = "apps"
+
+[access_scopes]
+# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
+scopes = "write_products, write_orders, read_orders, read_checkouts, write_checkouts, unauthenticated_write_checkouts, unauthenticated_read_checkouts, unauthenticated_read_product_listings, write_app_proxy, write_order_edits, read_customers, read_publications, write_publications, write_payment_customizations, read_payment_customizations"
+
+[auth]
+redirect_urls = ["https://traditional-happening-alex-ccd.trycloudflare.com/auth/callback", "https://traditional-happening-alex-ccd.trycloudflare.com/auth/shopify/callback", "https://traditional-happening-alex-ccd.trycloudflare.com/api/auth/callback"]
+
+[pos]
+embedded = false

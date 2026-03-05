@@ -1,0 +1,183 @@
+/* --- Main Container --- */
+.progress-bar-container {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica', 'Arial', sans-serif;
+  max-width: 440px;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 12px;
+  background-color: #ffffff;
+}
+
+/* --- Top Labels --- */
+.progress-bar-top-labels {
+  display: flex;
+  justify-content: space-around;
+  margin-bottom: 4px;
+}
+
+.progress-bar-top-labels .label {
+  flex-basis: 33.33%;
+  text-align: center;
+  font-size: 12px;
+  font-weight: bold;
+  color: #6442fe;
+}
+
+/* --- Bar Styling (FINAL VERSION) --- */
+.progress-bar-track {
+  --bar-height: 25px; 
+  display: flex;
+  gap: 4px;
+  height: var(--bar-height);
+}
+
+.bar-segment {
+  flex: 1;
+  background-color: #f0f0f0;
+  border-radius: 4px;
+  overflow: hidden;
+  position: relative; 
+}
+
+.bar-segment-fill {
+  display: block !important; 
+  height: var(--bar-height);
+  width: 0%; /* JS will override this */
+  background-color: #6442fe;
+  border-radius: 4px;
+  transition: width 0.5s ease-in-out;
+}
+
+/* --- Progress Text Styling --- */
+.progress-bar-text {
+  text-align: center;
+  margin-top: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #333;
+}
+
+/* --- Join Button Styling --- */
+.gb-join-button {
+  width: 100%;
+  margin-top: 5px;
+  padding: 25px;
+  font-size: 16px;
+  font-weight: 400;
+  text-align: center;
+  color: white;
+  background-color: #6442fe;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: transform 0.2s ease-in-out;
+}
+
+.gb-join-button:hover {
+  transform: scale(1.01);
+}
+
+/* --- NEW STYLE FOR SCHEDULED STATE --- */
+.gb-scheduled-container {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica', 'Arial', sans-serif;
+  max-width: 440px;
+  padding: 20px;
+  border-radius: 12px;
+  text-align: center;
+  background-color: #6442fe; /* Changed from border to background-color */
+  color: white; /* Set default text color to white */
+}
+.gb-scheduled-container h3 {
+  margin: 0 0 8px 0;
+  font-weight: 500;
+  font-size: 1.2em;
+  color: white; /* Changed text color */
+}
+.gb-scheduled-container .gb-countdown-timer {
+  font-weight: bold;
+  font-size: 1.1em;
+  color: white; /* Changed text color */
+}
+
+@keyframes gb-pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.2;
+  }
+}
+
+.gb-loading-container {
+  text-align: center;
+  padding: 20px;
+  animation: gb-pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes gb-fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+.gb-fade-out {
+  /* This applies the animation and keeps it at 0 opacity when done */
+  animation: gb-fade-out 300ms ease-out forwards;
+}
+
+.gb-notify-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 12px; /* Adjusted spacing */
+  padding: 4px; /* Small padding to make it easier to click */
+  background-color: transparent; /* No background */
+  color: white; /* Icon color */
+  border: none;
+  border-radius: 50%; /* Make the hover effect circular */
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.gb-notify-button:hover {
+  background-color: rgba(255, 255, 255, 0.2); /* Subtle background on hover */
+  transform: scale(1.1);
+}
+
+.gb-notify-icon {
+  width: 24px; /* Adjusted size */
+  height: 24px; /* Adjusted size */
+  fill: currentColor;
+}
+
+.gb-quantity-selector {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 10px 0;
+}
+.gb-quantity-selector input {
+  width: 60px;
+  text-align: center;
+}
+
+.countdown-container {
+  text-align: center; /* Horizontally centers the text */
+  font-size: 14px;
+  color: #333;
+}
+
+.countdown-timer {
+  font-weight: bold; /* Makes the timer text bold */
+}
+
+.gb-info-message {
+  font-size: 12px;
+  color: #5c5f62;
+  text-align: center;
+  margin: 8px 0;
+}

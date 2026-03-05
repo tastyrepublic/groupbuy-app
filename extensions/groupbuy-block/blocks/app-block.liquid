@@ -1,0 +1,30 @@
+{% comment %}
+  Load your CSS file as usual
+{% endcomment %}
+{{ 'progress-bar.css' | asset_url | stylesheet_tag }}
+
+<script src="{{ 'socket.io.min.js' | asset_url }}" defer="defer"></script>
+
+<script src="{{ 'progress-bar.js' | asset_url }}" defer="defer"></script>
+
+<div class="gb-widget" 
+  data-product-id="{{ product.id }}"
+  data-variant-id="{{ product.selected_or_first_available_variant.id }}"
+  data-shop="{{ shop.permanent_domain }}"
+  data-is-logged-in="{% if customer %}true{% else %}false{% endif %}"
+  data-customer-id="{% if customer %}{{ customer.id }}{% endif %}"
+  data-login-url="{{ routes.account_login_url }}"
+>
+  <div class="gb-loading-container">
+    <p>Loading Group Buy Deal...</p>
+  </div>
+</div>
+
+{% schema %}
+  {
+    "name": "Group Buy Widget",
+    "target": "section",
+    "stylesheet": "progress-bar.css",
+    "settings": []
+  }
+{% endschema %}
