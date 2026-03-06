@@ -1,53 +1,74 @@
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
+import { getFirestore, doc, onSnapshot, connectFirestoreEmulator } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+
+let firestoreUnsubscribe = null;
+
 const activeConnections = {};
+
 function clearConnections(container) {
   const timerIdKey = container?.dataset.productId;
   if (!timerIdKey) return;
   if (activeConnections[timerIdKey]?.timers) {
     activeConnections[timerIdKey].timers.forEach(clearInterval);
   }
-  if (activeConnections[timerIdKey]?.socket) {
-    activeConnections[timerIdKey].socket.disconnect();
+  // 🔥 FIREBASE UPDATE: Call the unsubscribe function instead of socket disconnect
+  if (activeConnections[timerIdKey]?.unsubscribe) {
+    activeConnections[timerIdKey].unsubscribe();
   }
   delete activeConnections[timerIdKey];
 }
+
 function storeTimer(container, intervalId) {
   const timerIdKey = container?.dataset.productId;
   if (!timerIdKey) return;
-  if (!activeConnections[timerIdKey]) activeConnections[timerIdKey] = { timers: [], socket: null };
+  if (!activeConnections[timerIdKey]) activeConnections[timerIdKey] = { timers: [], unsubscribe: null };
   activeConnections[timerIdKey].timers.push(intervalId);
 }
-function storeSocket(container, socket) {
+
+// 🔥 FIREBASE UPDATE: Replace storeSocket with storeUnsubscribe
+function storeUnsubscribe(container, unsubscribe) {
   const timerIdKey = container?.dataset.productId;
   if (!timerIdKey) return;
-  if (!activeConnections[timerIdKey]) activeConnections[timerIdKey] = { timers: [], socket: null };
-  activeConnections[timerIdKey].socket = socket;
+  if (!activeConnections[timerIdKey]) activeConnections[timerIdKey] = { timers: [], unsubscribe: null };
+  activeConnections[timerIdKey].unsubscribe = unsubscribe;
 }
-function connectToWebSocket(container, campaignData) {
+
+function connectToFirebase(container, campaignData) {
   const campaignId = container.dataset.campaignId;
-  const productVariantId = container.dataset.variantId; // The currently selected *simple* ID
+  const productVariantId = container.dataset.variantId;
+  const projectId = container.dataset.fbProjectid; 
   
-  const socket = io('ws://localhost:8080'); 
+  // 1. Initialize Firebase (only once globally)
+  if (!window.firebaseApp) {
+    window.firebaseApp = initializeApp({ projectId: projectId });
+    window.firebaseDb = getFirestore(window.firebaseApp);
+  }
+  
+  const db = window.firebaseDb;
 
-  socket.on('connect', () => {
-    console.log('Group Buy: Socket.IO connected.');
-    socket.emit('subscribe', {
-      campaignId: campaignId,
-      campaignScope: campaignData.scope,
-      productVariantId: `gid://shopify/ProductVariant/${productVariantId}`
-    });
-  });
+  // 2. Determine which document to listen to
+  const simpleVariantId = productVariantId.split('/').pop();
+  let docId = `campaign_${campaignId}`;
+  if (campaignData.scope === 'VARIANT') {
+     docId = `campaign_${campaignId}_variant_${simpleVariantId}`;
+  }
 
-  socket.on('update', (data) => {
-    if (data.newProgress !== undefined) {
-      console.log('Group Buy: Received progress update!', data.newProgress);
-      updateProgressUI(container.querySelector('.progress-bar-container'), campaignData, data.newProgress);
+  // 3. Listen for real-time updates!
+  const docRef = doc(db, "campaignProgress", docId);
+  const unsubscribe = onSnapshot(docRef, (docSnap) => {
+    if (docSnap.exists()) {
+      const data = docSnap.data();
+      console.log('🔥 Firebase Real-Time Update:', data.progress);
+      
+      const progressBarContainer = container.querySelector('.progress-bar-container');
+      if (progressBarContainer) {
+        updateProgressUI(progressBarContainer, campaignData, data.progress);
+      }
     }
   });
 
-  socket.on('disconnect', () => console.log('Group Buy: Socket.IO disconnected.'));
-  socket.onerror = (error) => console.error('Group Buy: Socket.IO error:', error);
-  
-  storeSocket(container, socket);
+  // 4. Store the unsubscribe function so we can clean it up when the variant changes
+  storeUnsubscribe(container, unsubscribe);
 }
 
 // --- UI Update Functions ---
@@ -118,7 +139,7 @@ function fetchAndRenderCampaign(container, variantId) {
 
           if (data.campaign.status === 'ACTIVE') {
             renderActiveCampaign(container, data);
-            connectToWebSocket(container, data.campaign);
+            connectToFirebase(container, data.campaign);
           } else if (data.campaign.status === 'SCHEDULED') {
             renderScheduledCampaign(container, data.campaign);
           }

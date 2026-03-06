@@ -14,7 +14,7 @@ api_version = "2025-07"
 
   [[webhooks.subscriptions]]
   topics = [ "orders/create" ]
-  uri = "pubsub://groupbuy-app-472319:shopify-orders-create"
+  uri = "pubsub://groupbuy-app-635bf:shopify-orders-create"
 
   [[webhooks.subscriptions]]
   topics = [ "app/uninstalled" ]

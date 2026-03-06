@@ -3,9 +3,7 @@
 {% endcomment %}
 {{ 'progress-bar.css' | asset_url | stylesheet_tag }}
 
-<script src="{{ 'socket.io.min.js' | asset_url }}" defer="defer"></script>
-
-<script src="{{ 'progress-bar.js' | asset_url }}" defer="defer"></script>
+<script type="module" src="{{ 'progress-bar.js' | asset_url }}" defer="defer"></script>
 
 <div class="gb-widget" 
   data-product-id="{{ product.id }}"
@@ -14,6 +12,7 @@
   data-is-logged-in="{% if customer %}true{% else %}false{% endif %}"
   data-customer-id="{% if customer %}{{ customer.id }}{% endif %}"
   data-login-url="{{ routes.account_login_url }}"
+  data-fb-projectid="groupbuy-app-635bf"
 >
   <div class="gb-loading-container">
     <p>Loading Group Buy Deal...</p>

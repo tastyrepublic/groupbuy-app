@@ -26,3 +26,4 @@ database.sqlite
 
 # Ignore secret credentials
 scripts/*.json
+service-account.json

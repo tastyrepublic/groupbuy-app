@@ -23,7 +23,7 @@
     "node": "^18.20 || ^20.10 || >=21.0.0"
   },
   "dependencies": {
-    "@google-cloud/pubsub": "^5.2.0",
+    "@google-cloud/pubsub": "^5.3.0",
     "@google-cloud/scheduler": "^5.3.0",
     "@prisma/client": "^6.2.1",
     "@remix-run/dev": "^2.16.1",
@@ -41,7 +41,6 @@
     "prisma": "^6.2.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "socket.io": "^4.8.1",
     "vite-tsconfig-paths": "^5.0.1"
   },
   "devDependencies": {
@@ -52,6 +51,7 @@
     "@types/node": "^22.2.0",
     "@types/react": "^18.2.31",
     "@types/react-dom": "^18.2.14",
+    "concurrently": "^9.2.1",
     "eslint": "^8.42.0",
     "eslint-config-prettier": "^10.0.1",
     "prettier": "^3.2.4",

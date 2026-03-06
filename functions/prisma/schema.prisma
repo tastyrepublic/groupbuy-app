@@ -1,0 +1,84 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+  engineType = "binary"
+}
+
+// Note that some adapters may set a maximum length for the String type by default, please ensure your strings are long
+// enough when changing adapters.
+// See https://www.prisma.io/docs/orm/reference/prisma-schema-reference#string for more information
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Session {
+  id            String    @id
+  shop          String
+  state         String
+  isOnline      Boolean   @default(false)
+  scope         String?
+  expires       DateTime?
+  accessToken   String
+  userId        BigInt?
+  firstName     String?
+  lastName      String?
+  email         String?
+  accountOwner  Boolean   @default(false)
+  locale        String?
+  collaborator  Boolean?  @default(false)
+  emailVerified Boolean?  @default(false)
+}
+
+model Campaign {
+  id                 Int      @id @default(autoincrement())
+  shop               String
+  productId          String // The Shopify Product GID, e.g., "gid://shopify/Product/12345"
+  productTitle       String
+  productImage       String? // The '?' makes this optional
+  selectedVariantIdsJson String? // Stores a JSON string of variant GIDs
+  startDateTime      DateTime
+  endDateTime        DateTime
+  timezone           String
+  tiersJson          String
+  leaderDiscount     Int
+  status             String   @default("DRAFT") // e.g., DRAFT, ACTIVE, EXPIRED
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  scope              String @default("PRODUCT") // "PRODUCT" or "VARIANT"
+  countingMethod     String @default("PARTICIPANT") // "PARTICIPANT" or "ITEM_QUANTITY"
+
+// --- NEW FIELDS ---
+  startingParticipants Int    @default(0) // For the marketing boost
+  schedulerJobName     String?  // To track the Google Cloud Scheduler job
+
+// A Campaign can have many Groups
+  groups             Group[]
+}
+
+// Represents a single instance of a group buy for a campaign
+model Group {
+  id           Int      @id @default(autoincrement())
+  shareToken   String   @unique @default(cuid()) // A unique, random ID for sharing links
+  status       String   @default("OPEN") // Can be OPEN, LOCKED, COMPLETED
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  campaignId   Int
+  campaign     Campaign @relation(fields: [campaignId], references: [id])
+  participants Participant[]
+}
+
+model Participant {
+  id         Int      @id @default(autoincrement())
+  orderId    String // The Shopify order GID (e.g., "gid://shopify/Order/12345")
+  customerId String // The Shopify customer GID
+  isLeader   Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  quantity   Int      @default(1)
+  productVariantId String?
+  groupId    Int
+  group      Group @relation(fields: [groupId], references: [id])
+}
