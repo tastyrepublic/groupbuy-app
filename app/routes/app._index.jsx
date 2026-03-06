@@ -1,5 +1,4 @@
 import { json } from "@remix-run/node";
-import { CloudSchedulerClient } from '@google-cloud/scheduler';
 import { useLoaderData, useFetcher } from "@remix-run/react";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import {
@@ -88,52 +87,15 @@ export const loader = async ({ request }) => {
 export const action = async ({ request }) => {
   const formData = await request.formData();
 
-  if (formData.get("_action") === "delete") {
-    const campaignId = formData.get("campaignId");
-
-    try {
-      const campaign = await db.campaign.findUnique({
-        where: { id: parseInt(campaignId, 10) },
-      });
-
-      if (!campaign) {
-        return json({ error: "Campaign not found" }, { status: 404 });
-      }
-
-      if (campaign.schedulerJobName) {
-        const schedulerClient = new CloudSchedulerClient();
-        const projectId = process.env.GOOGLE_CLOUD_PROJECT_ID;
-        const location = 'asia-east2'; 
-
-        const jobPath = `projects/${projectId}/locations/${location}/jobs/${campaign.schedulerJobName}`;
-
-        console.log(`Attempting to delete Google Cloud Scheduler job: ${jobPath}`);
-        
-        try {
-          await schedulerClient.deleteJob({ name: jobPath });
-          console.log(`Successfully deleted scheduler job: ${jobPath}`);
-        } catch (error) {
-           if (error.code !== 5) { 
-             throw error; 
-           }
-            console.log(`Scheduler job not found (code: 5), proceeding with DB deletion.`);
-        }
-      }
-
-      await db.campaign.delete({
-        where: { id: parseInt(campaignId, 10) },
-      });
-
-      return json({ success: true });
-
-    } catch (error) {
-      console.error("Failed to delete campaign or scheduler job:", error);
-      return json({ error: "Failed to delete campaign" }, { status: 500 });
-    }
-  }
-
-  return json({ error: "Invalid action" }, { status: 400 });
-};
+  // SIMPLIFIED DELETE ACTION
+if (formData.get("_action") === "delete") {
+  const campaignId = formData.get("campaignId");
+  await db.campaign.delete({
+    where: { id: parseInt(campaignId, 10) },
+  });
+  return json({ success: true });
+ }
+}
 
 // ✅ UPDATED: DeleteCampaignButton 
 // accepts the parent fetcher to avoid the "Zombie" issue

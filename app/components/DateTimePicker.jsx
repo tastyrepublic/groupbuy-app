@@ -1,8 +1,8 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
-import { Card, Popover, DatePicker, TextField, Icon, Select, InlineGrid } from '@shopify/polaris';
-import { CalendarIcon } from '@shopify/polaris-icons';
+import { useState, useEffect, useMemo } from 'react';
+import { Popover, TextField, Icon, InlineGrid } from '@shopify/polaris';
+import { CalendarIcon, ClockIcon, ChevronLeftIcon, ChevronRightIcon } from '@shopify/polaris-icons';
 import { formatInTimeZone, toDate } from 'date-fns-tz';
-import { format } from 'date-fns';
+import { format, getDaysInMonth, addMonths, subMonths } from 'date-fns';
 
 export function DateTimePicker({
   label,
@@ -14,94 +14,206 @@ export function DateTimePicker({
   disabled,
   error,
 }) {
-  const [popoverActive, setPopoverActive] = useState(false);
+  const [datePopoverActive, setDatePopoverActive] = useState(false);
+  const [timePopoverActive, setTimePopoverActive] = useState(false);
+  const [timeMode, setTimeMode] = useState('hour');
 
+  // --- 🔒 UNTOUCHED LOGIC: Timezone Handling ---
   const selectedDateObj = selectedDateTime ? toDate(selectedDateTime) : toDate(new Date(), { timeZone: timezone });
-  const [{ month, year }, setDate] = useState({ month: selectedDateObj.getMonth(), year: selectedDateObj.getFullYear() });
+  const [viewDate, setViewDate] = useState(selectedDateObj);
 
   useEffect(() => {
-    if (selectedDateTime) {
-      const newDate = toDate(selectedDateTime, { timeZone: timezone });
-      setDate({ month: newDate.getMonth(), year: newDate.getFullYear() });
-    }
+    if (selectedDateTime) setViewDate(toDate(selectedDateTime, { timeZone: timezone }));
   }, [selectedDateTime, timezone]);
 
-  const dateForPicker = useMemo(() => {
-    if (!selectedDateTime) return new Date();
-    const y = Number(formatInTimeZone(selectedDateObj, timezone, 'yyyy'));
-    const m = Number(formatInTimeZone(selectedDateObj, timezone, 'M')) - 1;
-    const d = Number(formatInTimeZone(selectedDateObj, timezone, 'd'));
-    return new Date(Date.UTC(y, m, d)); // Use UTC to prevent timezone shifts
-  }, [selectedDateObj, timezone]);
-
-  const disableBeforeDate = useMemo(() => {
+  const minDateStr = useMemo(() => {
     if (!minDateTime) return null;
-    const minDate = toDate(minDateTime);
-    const y = Number(formatInTimeZone(minDate, timezone, 'yyyy'));
-    const m = Number(formatInTimeZone(minDate, timezone, 'M')) - 1;
-    const d = Number(formatInTimeZone(minDate, timezone, 'd'));
-    return new Date(y, m, d);
+    return formatInTimeZone(toDate(minDateTime), timezone, 'yyyy-MM-dd');
   }, [minDateTime, timezone]);
 
-  const handleDateChange = useCallback(({ start }) => {
+  // --- 🎨 HK-DRIVE STYLE: Date Selection ---
+  const handleDateClick = (day) => {
+    const year = viewDate.getFullYear();
+    const month = viewDate.getMonth();
     const existingTime = selectedDateTime ? formatInTimeZone(toDate(selectedDateTime), timezone, 'HH:mm:ss') : '09:00:00';
-    const newDateStr = format(start, 'yyyy-MM-dd');
-    const newDateTimeStr = `${newDateStr}T${existingTime}`;
-    let newDateTime = toDate(newDateTimeStr, { timeZone: timezone });
+    const newDateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    let newDateTime = toDate(`${newDateStr}T${existingTime}`, { timeZone: timezone });
 
+    // Enforce minDateTime bounds during date switch
     if (minDateTime && newDateTime < minDateTime) {
       newDateTime = toDate(minDateTime);
     }
     
     onDateTimeChange(newDateTime.toISOString());
-    setPopoverActive(false);
-  }, [selectedDateTime, timezone, minDateTime, onDateTimeChange]);
+    setDatePopoverActive(false);
+  };
 
-  const handleTimeChange = useCallback((selectedTime) => {
+  // --- 🎨 HK-DRIVE STYLE: Time Logic ---
+  const [curH, curM] = selectedDateTime ? formatInTimeZone(selectedDateObj, timezone, 'HH:mm').split(':') : ['09', '00'];
+
+  const handleTimeClick = (type, val) => {
     const datePart = formatInTimeZone(selectedDateObj, timezone, 'yyyy-MM-dd');
-    const newDateTimeStr = `${datePart}T${selectedTime}:00`;
-    const newDateTime = toDate(newDateTimeStr, { timeZone: timezone });
+    const h = type === 'hour' ? val : curH;
+    const m = type === 'minute' ? val : curM;
+    const newDateTime = toDate(`${datePart}T${h}:${m}:00`, { timeZone: timezone });
+    
     onDateTimeChange(newDateTime.toISOString());
-  }, [selectedDateObj, timezone, onDateTimeChange]);
+    if (type === 'hour') {
+      setTimeMode('minute');
+    } else {
+      setTimePopoverActive(false);
+      setTimeMode('hour');
+    }
+  };
 
-  const timeOptions = useMemo(() => {
-    const allOptions = Array.from({ length: 48 }, (_, i) => { const h = Math.floor(i / 2); const m = (i % 2) * 30; return { label: `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`, value: `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}` }; });
-    if (!minDateTime) return allOptions;
+  const hours = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'));
+  const minutes = ['00', '15', '30', '45'];
+
+  // --- 🔒 UNTOUCHED LOGIC: Disabling past times ---
+  const isTimeDead = (type, val) => {
+    if (!minDateTime) return false;
     
-    const selectedDayStr = formatInTimeZone(selectedDateObj, timezone, 'yyyy-MM-dd');
-    const minDayStr = formatInTimeZone(minDateTime, timezone, 'yyyy-MM-dd');
+    const selDayStr = formatInTimeZone(selectedDateObj, timezone, 'yyyy-MM-dd');
+    const minD = toDate(minDateTime);
+    const minDayStr = formatInTimeZone(minD, timezone, 'yyyy-MM-dd');
     
-    if (selectedDayStr > minDayStr) return allOptions;
-    if (selectedDayStr < minDayStr) return [];
+    if (selDayStr < minDayStr) return true;
+    if (selDayStr > minDayStr) return false;
 
-    const [minHour, minMinute] = formatInTimeZone(minDateTime, timezone, 'HH:mm').split(':').map(Number);
+    // We are on the exact same day as the minimum date. Apply hour/minute restrictions.
+    const [minH, minM] = formatInTimeZone(minD, timezone, 'HH:mm').split(':').map(Number);
     
-    return allOptions.filter(o => { 
-        const [h, m] = o.value.split(':').map(Number); 
-        if (h > minHour) return true; 
+    if (type === 'hour') return Number(val) < minH;
+    
+    if (type === 'minute') {
+      if (Number(curH) < minH) return true;
+      if (Number(curH) > minH) return false;
+      // Exact same hour, check minutes using the 'inclusive' rule
+      return inclusive ? Number(val) < minM : Number(val) <= minM;
+    }
+    return false;
+  };
 
-        if (inclusive) {
-            if (h === minHour && m >= minMinute) return true;
-        } else {
-            if (h === minHour && m > minMinute) return true;
-        }
-        
-        return false; 
-    });
-  }, [selectedDateObj, timezone, minDateTime, inclusive]);
-
-  const formattedDateForField = useMemo(() => selectedDateTime ? formatInTimeZone(selectedDateObj, timezone, 'MMMM d, yyyy') : '', [selectedDateTime, timezone, selectedDateObj]);
-  const formattedTimeForSelect = useMemo(() => selectedDateTime ? formatInTimeZone(selectedDateObj, timezone, 'HH:mm') : '', [selectedDateTime, timezone, selectedDateObj]);
-  const datePickerActivator = (<TextField label={label} value={formattedDateForField} prefix={<Icon source={CalendarIcon} />} autoComplete="off" onFocus={() => setPopoverActive(true)} disabled={disabled} error={error} />);
+  const formattedDate = selectedDateTime ? formatInTimeZone(selectedDateObj, timezone, 'MMM d, yyyy') : '';
+  const formattedTime = selectedDateTime ? formatInTimeZone(selectedDateObj, timezone, 'HH:mm') : 'Select time';
 
   return (
     <InlineGrid columns="1fr auto" gap="200" alignItems="end">
-      <Popover active={popoverActive} activator={datePickerActivator} onClose={() => setPopoverActive(false)}>
-        <Card>
-          <DatePicker month={month} year={year} onChange={handleDateChange} onMonthChange={(m, y) => setDate({month: m, year: y})} selected={dateForPicker} disableDatesBefore={disableBeforeDate} />
-        </Card>
+      
+      {/* Date Picker Popover */}
+      <Popover
+        active={datePopoverActive}
+        onClose={() => setDatePopoverActive(false)}
+        activator={
+          <TextField 
+            label={label} 
+            value={formattedDate} 
+            prefix={<Icon source={CalendarIcon} />} 
+            onFocus={() => setDatePopoverActive(true)} 
+            autoComplete="off" 
+            disabled={disabled} 
+            error={error} 
+          />
+        }
+      >
+        <div style={{ padding: '16px', width: '280px', backgroundColor: '#fff', borderRadius: '8px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+            <button onClick={() => setViewDate(subMonths(viewDate, 1))} style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: '4px', borderRadius: '4px' }}>
+              <Icon source={ChevronLeftIcon} />
+            </button>
+            <span style={{ fontWeight: 'bold', fontSize: '14px', color: '#202223' }}>{format(viewDate, 'MMMM yyyy')}</span>
+            <button onClick={() => setViewDate(addMonths(viewDate, 1))} style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: '4px', borderRadius: '4px' }}>
+              <Icon source={ChevronRightIcon} />
+            </button>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px', marginBottom: '8px' }}>
+            {['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'].map(d => (
+              <div key={d} style={{ textAlign: 'center', fontSize: '10px', fontWeight: 'bold', color: '#6d7175' }}>{d}</div>
+            ))}
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px' }}>
+            {Array.from({ length: getDaysInMonth(viewDate) }, (_, i) => {
+              const day = i + 1;
+              const dateStr = format(new Date(viewDate.getFullYear(), viewDate.getMonth(), day), 'yyyy-MM-dd');
+              const isPast = minDateStr ? dateStr < minDateStr : false;
+              const isSelected = formattedDate === format(new Date(viewDate.getFullYear(), viewDate.getMonth(), day), 'MMM d, yyyy');
+              
+              return (
+                <button 
+                  key={day} 
+                  disabled={isPast} 
+                  onClick={() => handleDateClick(day)} 
+                  style={{
+                    aspectRatio: '1/1', border: 'none', borderRadius: '4px', cursor: isPast ? 'not-allowed' : 'pointer', fontWeight: 'bold', fontSize: '12px',
+                    backgroundColor: isSelected ? '#8a2be2' : 'transparent', 
+                    color: isSelected ? '#fff' : isPast ? '#d2d5d8' : '#202223',
+                  }}
+                >
+                  {day}
+                </button>
+              );
+            })}
+          </div>
+        </div>
       </Popover>
-      <Select label="Time" labelHidden options={timeOptions} value={formattedTimeForSelect} onChange={handleTimeChange} disabled={disabled || timeOptions.length === 0} />
+
+      {/* Time Picker Popover */}
+      <Popover
+        active={timePopoverActive}
+        onClose={() => { setTimePopoverActive(false); setTimeMode('hour'); }}
+        activator={
+          <div style={{ width: '120px' }}>
+            <TextField 
+              label="Time" 
+              labelHidden 
+              value={formattedTime} 
+              prefix={<Icon source={ClockIcon} />} 
+              onFocus={() => setTimePopoverActive(true)} 
+              autoComplete="off" 
+              disabled={disabled} 
+            />
+          </div>
+        }
+      >
+        <div style={{ padding: '16px', width: '280px', backgroundColor: '#fff', borderRadius: '8px' }}>
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+             <button 
+               onClick={() => setTimeMode('hour')} 
+               style={{ flex: 1, padding: '8px', borderRadius: '8px', border: timeMode === 'hour' ? '2px solid #8a2be2' : '1px solid #e1e3e5', backgroundColor: timeMode === 'hour' ? '#f3e8ff' : '#fff', color: timeMode === 'hour' ? '#8a2be2' : '#202223', fontSize: '18px', fontWeight: 'bold', cursor: 'pointer' }}
+             >
+               {curH}
+             </button>
+             <span style={{ fontSize: '20px', fontWeight: 'bold', alignSelf: 'center' }}>:</span>
+             <button 
+               onClick={() => setTimeMode('minute')} 
+               style={{ flex: 1, padding: '8px', borderRadius: '8px', border: timeMode === 'minute' ? '2px solid #8a2be2' : '1px solid #e1e3e5', backgroundColor: timeMode === 'minute' ? '#f3e8ff' : '#fff', color: timeMode === 'minute' ? '#8a2be2' : '#202223', fontSize: '18px', fontWeight: 'bold', cursor: 'pointer' }}
+             >
+               {curM}
+             </button>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: timeMode === 'hour' ? 'repeat(4, 1fr)' : 'repeat(2, 1fr)', gap: '8px' }}>
+             {(timeMode === 'hour' ? hours : minutes).map(val => {
+               const dead = isTimeDead(timeMode, val);
+               const isSelected = (timeMode === 'hour' ? curH : curM) === val;
+               return (
+                 <button 
+                   key={val} 
+                   disabled={dead} 
+                   onClick={() => handleTimeClick(timeMode, val)} 
+                   style={{
+                     padding: '10px', borderRadius: '6px', border: isSelected ? '1px solid #8a2be2' : '1px solid #e1e3e5', fontWeight: 'bold', fontSize: '14px',
+                     backgroundColor: isSelected ? '#8a2be2' : '#fff', color: isSelected ? '#fff' : '#202223',
+                     opacity: dead ? 0.3 : 1, cursor: dead ? 'not-allowed' : 'pointer'
+                   }}
+                 >
+                   {val}
+                 </button>
+               );
+             })}
+          </div>
+        </div>
+      </Popover>
+
     </InlineGrid>
   );
 }

@@ -351,7 +351,7 @@ export default function CampaignOrdersPage() {
             )}
           </Card>
         </Layout.Section>
-      </Layout>
+      </Layout>      
     </Page>
   );
 }

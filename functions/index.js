@@ -2,6 +2,9 @@ const { onMessagePublished } = require("firebase-functions/v2/pubsub");
 const admin = require("firebase-admin");
 const { FieldValue } = require("firebase-admin/firestore");
 const { PrismaClient } = require("@prisma/client");
+const { onSchedule } = require("firebase-functions/v2/scheduler"); // ✅ Added for Sweeper
+// --- Replace your old node-fetch line with this one ---
+const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
 
 // Initialize Firebase Admin for Firestore access
 admin.initializeApp();
@@ -10,7 +13,9 @@ const firestore = admin.firestore();
 // Initialize Prisma to connect to NeonDB
 const prisma = new PrismaClient();
 
-// Calculates progress based on the campaign's scope
+// ============================================================================
+// 🛒 WEBHOOK: Calculates progress based on the campaign's scope
+// ============================================================================
 async function calculateNewProgress(campaign, fullVariantId) {
   let currentProgress = 0;
   
@@ -45,10 +50,8 @@ async function calculateNewProgress(campaign, fullVariantId) {
 exports.processGroupBuyOrder = onMessagePublished("shopify-orders-create", async (event) => {
   try {
     const message = event.data.message;
-    
     console.log("Raw Attributes from Shopify:", event.data.message.attributes);
 
-    // Decode the base64 JSON payload
     const payloadStr = Buffer.from(message.data, 'base64').toString();
     const payload = JSON.parse(payloadStr);
 
@@ -72,7 +75,6 @@ exports.processGroupBuyOrder = onMessagePublished("shopify-orders-create", async
 
     console.log(`  ✅ This is a Group Buy order for campaign ${campaignId}!`);
 
-    // Find or create the active group
     let group = await prisma.group.findFirst({
       where: { campaignId, status: "OPEN" },
       orderBy: { createdAt: 'desc' }
@@ -83,22 +85,14 @@ exports.processGroupBuyOrder = onMessagePublished("shopify-orders-create", async
     }
 
     const orderId = payload.admin_graphql_api_id;
-    
-    // Handle guest checkouts so they don't all clump into one "guest-customer"
-    const customerId = payload.customer?.admin_graphql_api_id 
-      || payload.email 
-      || `guest-${orderId}`; 
-
+    const customerId = payload.customer?.admin_graphql_api_id || payload.email || `guest-${orderId}`; 
     let hasCreatedParticipant = false;
 
-    // Loop through each line item
     for (const item of payload.line_items) {
       const fullVariantId = `gid://shopify/ProductVariant/${item.variant_id}`;
       const validVariants = JSON.parse(campaign.selectedVariantIdsJson || '[]');
       
       if (validVariants.includes(fullVariantId)) {
-        
-        // Idempotency check to prevent duplicate entries
         const existingParticipant = await prisma.participant.findFirst({
           where: { orderId, productVariantId: fullVariantId }
         });
@@ -118,10 +112,7 @@ exports.processGroupBuyOrder = onMessagePublished("shopify-orders-create", async
           hasCreatedParticipant = true;
           console.log(`  ✅ Saved participant for variant ${item.variant_id} (Qty: ${item.quantity})`);
           
-          // Calculate the new progress
           const newProgress = await calculateNewProgress(campaign, fullVariantId);
-          
-          // 🔥 FIREBASE UPDATE: Write the update to Firestore
           const simpleVariantId = item.variant_id;
           
           let docId = `campaign_${campaignId}`;
@@ -147,6 +138,258 @@ exports.processGroupBuyOrder = onMessagePublished("shopify-orders-create", async
 
   } catch (error) {
     console.error("❌ Worker: Error processing message:", error);
-    throw error; // Throwing tells Pub/Sub to retry this message later
+    throw error;
+  }
+});
+
+// ============================================================================
+// 🧹 THE SWEEPER: Runs every 5 minutes to finalize expired campaigns
+// ============================================================================
+
+// --- HELPER: Raw Shopify GraphQL Caller ---
+async function shopifyGraphQL(shop, accessToken, query, variables = {}) {
+  const response = await fetch(`https://${shop}/admin/api/2025-04/graphql.json`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Shopify-Access-Token': accessToken,
+    },
+    body: JSON.stringify({ query, variables })
+  });
+  
+  if (!response.ok) {
+    throw new Error(`Shopify API HTTP Error: ${response.status}`);
+  }
+  return response.json();
+}
+
+// --- HELPER 1: Process Success (Includes finalCapture Fix) ---
+async function processParticipants(participants, finalDiscountTier, shop, accessToken) {
+  for (const participant of participants) {
+    console.log(`   - Processing order ${participant.orderId}...`);
+    try {
+      // 1. Begin Order Edit
+      const beginEditJson = await shopifyGraphQL(shop, accessToken, 
+        `mutation orderEditBegin($id: ID!) {
+          orderEditBegin(id: $id) {
+            calculatedOrder {
+              id
+              lineItems(first: 25) { edges { node { id quantity variant { id } } } }
+            }
+            userErrors { field message }
+          }
+        }`,
+        { id: participant.orderId }
+      );
+
+      const calculatedOrder = beginEditJson.data?.orderEditBegin?.calculatedOrder;
+      if (!calculatedOrder) {
+        console.error(`     ❌ Failed to begin edit for order ${participant.orderId}`);
+        continue;
+      }
+      
+      const calculatedOrderId = calculatedOrder.id;
+
+      // 2. Apply Discount to Line Item
+      const lineItemToDiscount = calculatedOrder.lineItems.edges.find(
+        (edge) => edge.node.variant.id === participant.productVariantId
+      )?.node;
+      
+      if (lineItemToDiscount) {
+        await shopifyGraphQL(shop, accessToken,
+          `mutation orderEditAddLineItemDiscount($id: ID!, $lineItemId: ID!, $discount: OrderEditAppliedDiscountInput!) {
+            orderEditAddLineItemDiscount(id: $id, lineItemId: $lineItemId, discount: $discount) {
+              calculatedOrder { id }
+            }
+          }`,
+          {
+            id: calculatedOrderId,
+            lineItemId: lineItemToDiscount.id,
+            discount: { percentValue: parseFloat(finalDiscountTier.discount), description: "Group Buy Discount" }
+          }
+        );
+      }
+      
+      // 3. Commit the Edit
+      await shopifyGraphQL(shop, accessToken,
+        `mutation orderEditCommit($id: ID!) {
+          orderEditCommit(id: $id) { order { id } }
+        }`,
+        { id: calculatedOrderId }
+      );
+
+      // 4. Find Authorization and Capture Payment
+      const orderJson = await shopifyGraphQL(shop, accessToken,
+        `query getOrderTransactions($id: ID!) {
+          order(id: $id) {
+            totalPriceSet { shopMoney { amount currencyCode } }
+            transactions(first: 5) { id kind status }
+          }
+        }`,
+        { id: participant.orderId }
+      );
+      
+      const orderData = orderJson.data?.order;
+      const parentTransaction = orderData?.transactions?.find(txn => txn.kind === "AUTHORIZATION" && txn.status === "SUCCESS");
+
+      if (parentTransaction) {
+        const finalPrice = parseFloat(orderData.totalPriceSet.shopMoney.amount);
+        const currency = orderData.totalPriceSet.shopMoney.currencyCode;
+
+        await shopifyGraphQL(shop, accessToken,
+          `mutation orderCapture($input: OrderCaptureInput!) {
+            orderCapture(input: $input) { 
+              transaction { id } 
+              userErrors { field message }
+            }
+          }`,
+          { 
+            input: { 
+              id: participant.orderId, 
+              parentTransactionId: parentTransaction.id, 
+              amount: finalPrice, 
+              currency: currency,
+            } 
+          }
+        );
+        console.log(`     ✅ Captured ${finalPrice.toFixed(2)} ${currency} for order ${participant.orderId}`);
+      } else {
+        console.log(`     -> No authorized payment found to capture for order ${participant.orderId}`);
+      }
+    } catch (error) {
+      console.error(`     ❌ Error processing order ${participant.orderId}:`, error.message);
+    }
+  }
+}
+
+// --- HELPER 2: Process Failure (Cancels Orders & Voids Payment) ---
+async function cancelFailedOrders(participants, shop, accessToken) {
+  for (const participant of participants) {
+    console.log(`   - Canceling order ${participant.orderId} (Campaign Failed)...`);
+    try {
+      const cancelJson = await shopifyGraphQL(shop, accessToken,
+        `mutation orderCancel($orderId: ID!, $reason: OrderCancelReason!) {
+          orderCancel(orderId: $orderId, reason: $reason, notifyCustomer: true, restock: true, refund: true) {
+            job { id }
+            orderCancelUserErrors { field message }
+          }
+        }`,
+        { 
+          orderId: participant.orderId, 
+          reason: "DECLINED" 
+        }
+      );
+
+      const errors = cancelJson.data?.orderCancel?.orderCancelUserErrors;
+
+      if (errors && errors.length > 0) {
+        console.error(`     ❌ Error canceling ${participant.orderId}:`, errors);
+      } else {
+        console.log(`     ✅ Successfully canceled order and voided authorization.`);
+      }
+    } catch (error) {
+      console.error(`     ❌ Error during cancellation of ${participant.orderId}:`, error.message);
+    }
+  }
+}
+
+// 🚀 The Sweeper Function Trigger
+exports.campaignFinalizer = onSchedule("every 5 minutes", async (event) => {
+  console.log("🧹 Sweeper waking up! Checking for expired campaigns...");
+  const now = new Date();
+
+  try {
+    // Find all ACTIVE campaigns where the end time has passed
+    const expiredCampaigns = await prisma.campaign.findMany({
+      where: { 
+        status: "ACTIVE", 
+        endDateTime: { lte: now } 
+      },
+      include: { groups: { include: { participants: true } } }
+    });
+
+    if (expiredCampaigns.length === 0) {
+      console.log(" -> No expired campaigns found. Going back to sleep.");
+      return;
+    }
+
+    console.log(` -> Found ${expiredCampaigns.length} campaigns to finalize!`);
+
+    for (const campaign of expiredCampaigns) {
+      console.log(`\n--- ⏰ Finalizing Campaign ID: ${campaign.id} ---`);
+
+      // 🔑 Get the Shopify Offline Access Token from the DB
+      const session = await prisma.session.findFirst({
+        where: { shop: campaign.shop, isOnline: false }
+      });
+
+      if (!session) {
+        console.error(` ❌ No offline session found for shop: ${campaign.shop}. Skipping.`);
+        continue;
+      }
+
+      let anyVariantSucceeded = false;
+      const allParticipants = campaign.groups.flatMap((g) => g.participants);
+      const tiers = JSON.parse(campaign.tiersJson).sort((a, b) => b.quantity - a.quantity);
+
+      if (campaign.scope === 'PRODUCT') {
+        let finalProgress = campaign.startingParticipants;
+        if (campaign.countingMethod === 'ITEM_QUANTITY') {
+          finalProgress += allParticipants.reduce((sum, p) => sum + p.quantity, 0);
+        } else {
+          finalProgress += new Set(allParticipants.map(p => p.customerId)).size;
+        }
+
+        const finalDiscountTier = tiers.find(tier => finalProgress >= tier.quantity);
+        
+        if (finalDiscountTier && allParticipants.length > 0) {
+          console.log(`   ✅ Success! Reached ${finalDiscountTier.quantity} for ${finalDiscountTier.discount}% off.`);
+          anyVariantSucceeded = true;
+          await processParticipants(allParticipants, finalDiscountTier, campaign.shop, session.accessToken);
+        } else {
+          console.log("   -> Campaign failed. Canceling all orders.");
+          await cancelFailedOrders(allParticipants, campaign.shop, session.accessToken);
+        }
+
+      } else {
+        // VARIANT Scope Logic
+        const allVariantGIDsInCampaign = JSON.parse(campaign.selectedVariantIdsJson || '[]');
+        
+        for (const variantId of allVariantGIDsInCampaign) {
+          const participantsForThisVariant = allParticipants.filter(p => p.productVariantId === variantId);
+          if (participantsForThisVariant.length === 0) continue;
+
+          let variantProgress = campaign.startingParticipants;
+          if (campaign.countingMethod === 'ITEM_QUANTITY') {
+            variantProgress += participantsForThisVariant.reduce((sum, p) => sum + p.quantity, 0);
+          } else {
+            variantProgress += new Set(participantsForThisVariant.map(p => p.customerId)).size;
+          }
+
+          const finalDiscountTier = tiers.find(tier => variantProgress >= tier.quantity);
+
+          if (finalDiscountTier) {
+            console.log(`   ✅ Variant ${variantId.split('/').pop()} Success! Applying ${finalDiscountTier.discount}% off.`);
+            anyVariantSucceeded = true;
+            await processParticipants(participantsForThisVariant, finalDiscountTier, campaign.shop, session.accessToken);
+          } else {
+            // ✅ New: Handle Individual Variant Failure
+            console.log(`   -> Variant ${variantId.split('/').pop()} failed. Canceling variant orders.`);
+            await cancelFailedOrders(participantsForThisVariant, campaign.shop, session.accessToken);
+          }
+        }
+      }
+
+      // Mark Campaign as Completed
+      const finalStatus = anyVariantSucceeded ? "SUCCESSFUL" : "FAILED";
+      await prisma.campaign.update({
+        where: { id: campaign.id },
+        data: { status: finalStatus },
+      });
+      console.log(`--- ✅ Campaign ${campaign.id} finalized with status: ${finalStatus} ---\n`);
+    }
+
+  } catch (error) {
+    console.error("❌ Fatal error in Sweeper execution:", error);
   }
 });

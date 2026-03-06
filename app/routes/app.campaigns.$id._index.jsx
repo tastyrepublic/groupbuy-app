@@ -1,6 +1,5 @@
 import { json, redirect } from "@remix-run/node";
 import { format } from 'date-fns';
-import { CloudSchedulerClient } from '@google-cloud/scheduler';
 import { useSubmit, useLoaderData, useNavigation, useActionData, useNavigate, useLocation, useBlocker } from "@remix-run/react";
 import { useAppBridge, SaveBar } from "@shopify/app-bridge-react";
 import { Page, Layout } from "@shopify/polaris";
@@ -165,36 +164,6 @@ export const action = async ({ request, params }) => {
   }
 
   try {
-    // --- Update Google Cloud Scheduler if schedule has changed ---
-    if (!isStarted && dataToUpdate.endDateTime) {
-        const schedulerClient = new CloudSchedulerClient();
-        const projectId = process.env.GOOGLE_CLOUD_PROJECT_ID;
-        const location = 'asia-east2';
-        const parent = `projects/${projectId}/locations/${location}`;
-
-        if (campaign.schedulerJobName) {
-            const oldJobPath = `${parent}/jobs/${campaign.schedulerJobName}`;
-            try { await schedulerClient.deleteJob({ name: oldJobPath }); }
-            catch (error) { if (error.code !== 5) throw error; }
-        }
-
-        const newJobName = `finalize-campaign-${campaign.id}-${Date.now()}`;
-        const newJob = {
-            name: `${parent}/jobs/${newJobName}`,
-            description: `Finalize group buy campaign ID ${campaign.id}`,
-      httpTarget: {
-        uri: `https://${request.headers.get('host')}/api/finalize-campaign`,
-        httpMethod: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.SCHEDULER_SECRET}` },
-        body: Buffer.from(JSON.stringify({ campaignId: campaign.id })),
-      },
-      schedule: format(dataToUpdate.endDateTime, "m H d M *"),
-            timeZone: 'Etc/UTC',
-        };
-        await schedulerClient.createJob({ parent, job: newJob });
-        dataToUpdate.schedulerJobName = newJobName;
-    }
-
     // --- Perform a single database update at the end ---
     if (Object.keys(dataToUpdate).length > 0) {
       await db.campaign.update({ where: { id: campaignId, shop: session.shop }, data: dataToUpdate });
