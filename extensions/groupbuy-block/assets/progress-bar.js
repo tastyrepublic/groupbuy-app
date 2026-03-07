@@ -58,11 +58,18 @@ function connectToFirebase(container, campaignData) {
   const unsubscribe = onSnapshot(docRef, (docSnap) => {
     if (docSnap.exists()) {
       const data = docSnap.data();
-      console.log('🔥 Firebase Real-Time Update:', data.progress);
+      
+      // ✅ NEW: Add the starting participants to the raw Firestore delta
+      const rawFirestoreProgress = data.progress || 0;
+      const startingParticipants = Number(campaignData.startingParticipants) || 0;
+      const totalDisplayProgress = rawFirestoreProgress + startingParticipants;
+      
+      console.log(`🔥 Firebase Raw: ${rawFirestoreProgress} | Total Displayed: ${totalDisplayProgress}`);
       
       const progressBarContainer = container.querySelector('.progress-bar-container');
       if (progressBarContainer) {
-        updateProgressUI(progressBarContainer, campaignData, data.progress);
+        // Pass the calculated total instead of just the raw data
+        updateProgressUI(progressBarContainer, campaignData, totalDisplayProgress);
       }
     }
   });

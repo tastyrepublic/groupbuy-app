@@ -95,11 +95,12 @@ export const CampaignForm = forwardRef(({
   useEffect(() => {
     const now = new Date();
     const newMinStartTime = new Date(now.getTime());
-    if (newMinStartTime.getMinutes() < 30) {
-      newMinStartTime.setMinutes(30, 0, 0);
-    } else {
-      newMinStartTime.setHours(newMinStartTime.getHours() + 1, 0, 0, 0);
-    }
+    
+    // ✅ NEW MATH: Round up to the next 10-minute block
+    const currentMinutes = newMinStartTime.getMinutes();
+    const remainder = currentMinutes % 10;
+    newMinStartTime.setMinutes(currentMinutes + (10 - remainder), 0, 0);
+
     setMinStartDateTime(newMinStartTime);
   }, [liveTime]);
 
@@ -108,17 +109,15 @@ export const CampaignForm = forwardRef(({
 
     if (!startDate) {
       let startTime = new Date();
+      
       const currentMinutes = startTime.getMinutes();
-      if (currentMinutes < 30) {
-        startTime.setMinutes(30, 0, 0);
-      } else {
-        startTime.setHours(startTime.getHours() + 1, 0, 0, 0);
-      }
+      const remainder = currentMinutes % 10;
+      startTime.setMinutes(currentMinutes + (10 - remainder), 0, 0);
 
       const startISO = startTime.toISOString();
       setStartDate(startISO);
 
-      const endTime = addMinutes(startTime, 30);
+      const endTime = addMinutes(startTime, 10);
       const endISO = endTime.toISOString();
       setEndDate(endISO);
 
@@ -133,7 +132,7 @@ export const CampaignForm = forwardRef(({
     const endDateObj = toDate(endDate);
 
     if (endDateObj <= startDateObj) {
-      const newEndDate = addMinutes(startDateObj, 30);
+      const newEndDate = addMinutes(startDateObj, 10);
       setEndDate(newEndDate.toISOString());
     }
   }, [startDate]);
@@ -276,8 +275,8 @@ export const CampaignForm = forwardRef(({
     if (!startDate) return null;
     let minDate = toDate(startDate);
     const [startHour, startMinute] = formatInTimeZone(minDate, timezone, 'HH:mm').split(':').map(Number);
-    if (startHour === 23 && startMinute === 30) {
-      minDate = addMinutes(minDate, 30);
+    if (startHour === 23 && startMinute === 10) {
+      minDate = addMinutes(minDate, 10);
     }
     return minDate;
   }, [startDate, timezone]);
@@ -295,8 +294,26 @@ export const CampaignForm = forwardRef(({
   const [leaderDiscountEnabled, setLeaderDiscountEnabled] = useState(() => parseInt(initialFormState.leaderDiscount, 10) > 0);
   const [startingParticipantsEnabled, setStartingParticipantsEnabled] = useState(() => parseInt(initialFormState.startingParticipants, 10) > 0);
 
-  const handleLeaderDiscountToggle = useCallback((event) => setLeaderDiscountEnabled(event.currentTarget.checked), []);
-  const handleStartingParticipantsToggle = useCallback((event) => setStartingParticipantsEnabled(event.currentTarget.checked), []);
+  const handleLeaderDiscountToggle = (event) => {
+    const isChecked = event.currentTarget.checked;
+    setLeaderDiscountEnabled(isChecked);
+    
+    // Turn off Fake Count, but DON'T erase the number they typed
+    if (isChecked) {
+      setStartingParticipantsEnabled(false);
+    }
+  };
+
+  const handleStartingParticipantsToggle = (event) => {
+    const isChecked = event.currentTarget.checked;
+    setStartingParticipantsEnabled(isChecked);
+    
+    // Turn off Leader Discount, but DON'T erase the number they typed
+    if (isChecked) {
+      setLeaderDiscountEnabled(false);
+    }
+  };
+
   const handleLeaderDiscountChange = (value) => {
     const sanitized = value.replace(/[^\d]/g, '');
     let numericValue = sanitized === '' ? 0 : parseInt(sanitized, 10);
@@ -536,6 +553,10 @@ useEffect(() => {
             <Card>
               <BlockStack gap="400">
                 <Text as="h2" variant="headingMd">Features</Text>
+                {/* ✅ NEW: Helper text explaining the mutually exclusive behavior */}
+                <Text as="p" tone="subdued">
+                  Note: Leader Discount and Fake Count cannot be used simultaneously. Enabling one will automatically turn off the other.
+                </Text>
                 <s-switch
                   ref={leaderDiscountSwitchRef}
                   label="Leader discount (%)"
@@ -585,8 +606,17 @@ useEffect(() => {
       <input type="hidden" name="endDate" value={endDate || ''} />
       <input type="hidden" name="timezone" value={timezone} />
       <input type="hidden" name="tiers" value={JSON.stringify(tiers)} />
-      <input type="hidden" name="startingParticipants" value={startingParticipants} />
-      <input type="hidden" name="leaderDiscount" value={leaderDiscount || '0'} />
+      {/* ✅ If the switch is off, force it to send '0' to protect the backend! */}
+      <input 
+        type="hidden" 
+        name="startingParticipants" 
+        value={startingParticipantsEnabled ? startingParticipants : '0'} 
+      />
+      <input 
+        type="hidden" 
+        name="leaderDiscount" 
+        value={leaderDiscountEnabled ? (leaderDiscount || '0') : '0'} 
+      />
       <input type="hidden" name="scope" value={scope} />
       <input type="hidden" name="countingMethod" value={countingMethod} />
     </Form>

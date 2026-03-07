@@ -1,37 +1,6 @@
 import { json } from "@remix-run/node";
 import db from "../../db.server";
 
-/**
- * ✅ NEW: This function correctly calculates progress based on scope
- */
-async function getCampaignProgress(campaign, fullVariantId) {
-  let currentProgress = 0;
-  
-  if (campaign.scope === 'PRODUCT') {
-    const participants = await db.participant.findMany({
-      where: { group: { campaignId: campaign.id } }
-    });
-    if (campaign.countingMethod === 'ITEM_QUANTITY') {
-      currentProgress = participants.reduce((sum, p) => sum + p.quantity, 0);
-    } else {
-      currentProgress = new Set(participants.map(p => p.customerId)).size;
-    }
-  } else { // 'VARIANT' scope
-    const participants = await db.participant.findMany({
-      where: {
-        group: { campaignId: campaign.id },
-        productVariantId: fullVariantId // Filter by the specific variant
-      }
-    });
-    if (campaign.countingMethod === 'ITEM_QUANTITY') {
-      currentProgress = participants.reduce((sum, p) => sum + p.quantity, 0);
-    } else {
-      currentProgress = new Set(participants.map(p => p.customerId)).size;
-    }
-  }
-  return currentProgress + campaign.startingParticipants;
-}
-
 export const loader = async ({ request }) => {
   const url = new URL(request.url);
   const productId = url.searchParams.get("productId");
@@ -44,6 +13,7 @@ export const loader = async ({ request }) => {
 
   const fullProductId = `gid://shopify/Product/${productId}`;
   const fullVariantId = `gid://shopify/ProductVariant/${variantId}`;
+  const simpleVariantId = variantId.split('/').pop();
   const now = new Date();
 
   try {
@@ -56,26 +26,44 @@ export const loader = async ({ request }) => {
       },
     });
 
-    if (potentialCampaigns.length === 0) {
-      return json({ campaign: null }, { status: 404 });
-    }
+    if (potentialCampaigns.length === 0) return json({ campaign: null }, { status: 404 });
 
     let campaign = potentialCampaigns.find(c => {
       const selectedIds = JSON.parse(c.selectedVariantIdsJson || '[]');
       return selectedIds.includes(fullVariantId);
     });
 
-    if (!campaign) {
-      return json({ campaign: null }, { status: 404 });
-    }
+    if (!campaign) return json({ campaign: null }, { status: 404 });
 
     const campaignStatus = new Date(campaign.startDateTime) > now ? "SCHEDULED" : "ACTIVE";
-    let finalProgress = 0;
+    
+    // Start with your fake count (the baseline)
+    let finalProgress = campaign.startingParticipants; 
 
+    // ✅ THE PLATINUM FIX: Lightweight REST Fetch instead of firebase-admin
     if (campaignStatus === "ACTIVE") {
-      finalProgress = await getCampaignProgress(campaign, fullVariantId);
-    } else {
-      finalProgress = campaign.startingParticipants;
+      let docId = `campaign_${campaign.id}`;
+      if (campaign.scope === 'VARIANT') {
+         docId = `campaign_${campaign.id}_variant_${simpleVariantId}`;
+      }
+
+      // We know your Firebase project ID from your frontend code
+      const projectId = "groupbuy-app-635bf"; 
+      const firestoreUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/campaignProgress/${docId}`;
+
+      try {
+        const fsResponse = await fetch(firestoreUrl);
+        if (fsResponse.ok) {
+          const fsData = await fsResponse.json();
+          // Firestore REST API returns numbers inside specific type keys
+          if (fsData.fields && fsData.fields.progress) {
+            const liveDelta = parseInt(fsData.fields.progress.integerValue || 0, 10);
+            finalProgress += liveDelta; // Add live sales to the fake count!
+          }
+        }
+      } catch (e) {
+        console.error("Non-fatal: Could not fetch initial Firestore delta via REST", e);
+      }
     }
 
     return json({
@@ -89,8 +77,9 @@ export const loader = async ({ request }) => {
         countingMethod: campaign.countingMethod,
         status: campaignStatus,
         selectedVariantIdsJson: campaign.selectedVariantIdsJson,
+        startingParticipants: campaign.startingParticipants, // Passed to frontend
       },
-      currentProgress: finalProgress,
+      currentProgress: finalProgress, // Sent perfectly pre-calculated!
     });
     
   } catch (error) {

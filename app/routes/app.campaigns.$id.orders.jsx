@@ -9,10 +9,12 @@ import {
   Badge,
   Link,
   BlockStack,
+  InlineStack,
   DescriptionList,
   Thumbnail,
   Select,
-  ProgressBar
+  Box,
+  EmptyState
 } from "@shopify/polaris";
 import { StarFilledIcon } from "@shopify/polaris-icons";
 import { useState } from "react";
@@ -26,7 +28,7 @@ export const loader = async ({ request, params }) => {
   const campaignId = parseInt(params.id, 10);
   
   const url = new URL(request.url);
-  let selectedVariantId = url.searchParams.get("variantId"); // This will be a simple ID
+  let selectedVariantId = url.searchParams.get("variantId");
 
   const campaign = await db.campaign.findUnique({
     where: { id: campaignId },
@@ -54,26 +56,23 @@ export const loader = async ({ request, params }) => {
     );
     const { data } = await variantQueryRes.json();
     allCampaignVariants = data.nodes.filter(Boolean).map(v => ({
-      id: v.id.split('/').pop(), // Store simple ID
+      id: v.id.split('/').pop(), 
       title: v.title
     }));
   }
-  // --- End Fetch ---
 
   if (!selectedVariantId && allCampaignVariants.length > 0) {
     selectedVariantId = allCampaignVariants[0].id;
   }
   
-  const fullVariantId = `gid://shopify/ProductVariant/${selectedVariantId}`;
-
+  const fullVariantId = selectedVariantId ? `gid://shopify/ProductVariant/${selectedVariantId}` : null;
 
   // --- 2. Get the Correct List of Participants ---
   let participantQuery = {
     group: { campaignId: campaign.id },
   };
 
-  if (campaign.scope === 'VARIANT') {
-    // If "Per-Variant", filter participants by the selected variant
+  if (campaign.scope === 'VARIANT' && fullVariantId) {
     participantQuery.productVariantId = fullVariantId;
   }
   
@@ -88,76 +87,72 @@ export const loader = async ({ request, params }) => {
     },
   });
 
-  if (participants.length === 0) {
-    return json({ 
-      campaign, 
-      rows: [], // Send empty rows array
-      allCampaignVariants, 
-      participantData: { count: 0, quantity: 0 } 
+  let participantData = { count: 0, quantity: 0 };
+  let rows = [];
+
+  if (participants.length > 0) {
+    // --- 3. Enrich Data with Shopify Details ---
+    const shopifyOrderIds = [...new Set(participants.map(p => p.orderId))];
+    const shopifyVariantIds = [...new Set(participants.map(p => p.productVariantId))];
+
+    const orderResponse = await admin.graphql(
+      `#graphql
+      query getOrderDetails($ids: [ID!]!) {
+        nodes(ids: $ids) {
+          ... on Order {
+            id, name, createdAt, displayFinancialStatus, displayFulfillmentStatus,
+            customer { displayName }
+          }
+        }
+      }`, { variables: { ids: shopifyOrderIds } }
+    );
+    const orderData = await orderResponse.json();
+    const orderMap = new Map(
+      orderData.data.nodes.filter(Boolean).map(order => [order.id, order])
+    );
+
+    const variantResponse = await admin.graphql(
+      `#graphql
+      query getVariantTitles($ids: [ID!]!) {
+        nodes(ids: $ids) {
+          ... on ProductVariant {
+            id
+            title
+          }
+        }
+      }`, { variables: { ids: shopifyVariantIds } }
+    );
+    const variantData = await variantResponse.json();
+    const variantMap = new Map(
+      variantData.data.nodes.filter(Boolean).map(variant => [variant.id, variant])
+    );
+
+    // --- 4. Combine all data into "rows" ---
+    rows = participants.map(p => {
+      const order = orderMap.get(p.orderId);
+      const variant = variantMap.get(p.productVariantId);
+
+      return {
+        orderId: p.orderId,
+        orderName: order ? order.name : 'Unknown',
+        orderShopifyId: order ? order.id.split('/').pop() : '#',
+        createdAt: order ? order.createdAt : new Date().toISOString(),
+        customerName: order?.customer ? order.customer.displayName : 'No customer',
+        paymentStatus: order ? order.displayFinancialStatus : 'UNKNOWN',
+        fulfillmentStatus: order ? order.displayFulfillmentStatus : 'UNFULFILLED',
+        isLeader: p.isLeader,
+        quantity: p.quantity,
+        variantTitle: variant 
+          ? (variant.title === 'Default Title' ? 'N/A' : variant.title) 
+          : (p.productVariantId ? 'Variant not found' : 'N/A')
+      };
     });
-  }
 
-  // --- 3. Enrich Data with Shopify Details ---
-  const shopifyOrderIds = [...new Set(participants.map(p => p.orderId))];
-  const shopifyVariantIds = [...new Set(participants.map(p => p.productVariantId))];
-
-  // Get Order and Customer details
-  const orderResponse = await admin.graphql(
-    `#graphql
-    query getOrderDetails($ids: [ID!]!) {
-      nodes(ids: $ids) {
-        ... on Order {
-          id, name, createdAt, displayFinancialStatus,
-          customer { displayName }
-        }
-      }
-    }`, { variables: { ids: shopifyOrderIds } }
-  );
-  const orderData = await orderResponse.json();
-  const orderMap = new Map(
-    orderData.data.nodes.filter(Boolean).map(order => [order.id, order])
-  );
-
-  // Get Variant details (titles)
-  const variantResponse = await admin.graphql(
-    `#graphql
-    query getVariantTitles($ids: [ID!]!) {
-      nodes(ids: $ids) {
-        ... on ProductVariant {
-          id
-          title
-        }
-      }
-    }`, { variables: { ids: shopifyVariantIds } }
-  );
-  const variantData = await variantResponse.json();
-  const variantMap = new Map(
-    variantData.data.nodes.filter(Boolean).map(variant => [variant.id, variant])
-  );
-
-  // --- 4. Combine all data into "rows" ---
-  const rows = participants.map(p => {
-    const order = orderMap.get(p.orderId);
-    const variant = variantMap.get(p.productVariantId);
-
-    return {
-      orderId: p.orderId,
-      orderName: order ? order.name : 'Unknown',
-      orderShopifyId: order ? order.id.split('/').pop() : '#',
-      createdAt: order ? order.createdAt : new Date().toISOString(),
-      customerName: order?.customer ? order.customer.displayName : 'No customer',
-      paymentStatus: order ? order.displayFinancialStatus : 'UNKNOWN',
-      isLeader: p.isLeader,
-      quantity: p.quantity,
-      variantTitle: variant ? variant.title : (p.productVariantId ? 'Variant not found' : 'N/A')
+    participantData = {
+      count: new Set(participants.map(p => p.customerId)).size,
+      quantity: participants.reduce((sum, p) => sum + p.quantity, 0)
     };
-  });
-
-  // Calculate stats based on the *filtered* list
-  const participantData = {
-    count: new Set(participants.map(p => p.customerId)).size,
-    quantity: participants.reduce((sum, p) => sum + p.quantity, 0)
-  };
+  }
 
   return json({ campaign, rows, allCampaignVariants, participantData });
 };
@@ -169,10 +164,13 @@ export default function CampaignOrdersPage() {
   const { campaign, rows, allCampaignVariants, participantData } = useLoaderData();
   const navigate = useNavigate();
   
-  const url = new URL(window.location.href);
-  const [selectedVariantId, setSelectedVariantId] = useState(
-    url.searchParams.get("variantId") || allCampaignVariants[0]?.id || ""
-  );
+  const [selectedVariantId, setSelectedVariantId] = useState(() => {
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      return url.searchParams.get("variantId") || allCampaignVariants[0]?.id || "";
+    }
+    return allCampaignVariants[0]?.id || "";
+  });
 
   const handleVariantChange = (value) => {
     setSelectedVariantId(value);
@@ -180,7 +178,7 @@ export default function CampaignOrdersPage() {
   };
 
   const variantOptions = allCampaignVariants.map(v => ({
-    label: v.title,
+    label: v.title === 'Default Title' ? 'Standard Product' : v.title,
     value: v.id,
   }));
   
@@ -192,23 +190,33 @@ export default function CampaignOrdersPage() {
       default: return 'default';
     }
   };
+
+  const getFulfillmentBadgeTone = (status) => {
+    switch (status) {
+      case 'FULFILLED': return 'success';
+      case 'UNFULFILLED': return 'attention';
+      case 'PARTIALLY_FULFILLED': return 'info';
+      default: return 'default';
+    }
+  };
   
-  // --- ✅ NEW PROGRESS BAR LOGIC ---
-  const totalProgress = (
-    campaign.countingMethod === 'ITEM_QUANTITY' 
-      ? participantData.quantity 
-      : participantData.count
-  ) + campaign.startingParticipants;
+  // --- ✅ NEW: MULTI-SEGMENT PROGRESS BAR LOGIC ---
+  const fakeCount = campaign.startingParticipants || 0;
+  const realCount = campaign.countingMethod === 'ITEM_QUANTITY' 
+    ? participantData.quantity 
+    : participantData.count;
+  const totalProgress = realCount + fakeCount;
 
   const progressLabel = campaign.countingMethod === 'ITEM_QUANTITY' 
     ? (campaign.scope === 'VARIANT' ? 'Variant Items Sold' : 'Total Items Sold') 
     : (campaign.scope === 'VARIANT' ? 'Variant Participants' : 'Total Participants');
 
-  const tiers = JSON.parse(campaign.tiersJson);
+  const tiers = JSON.parse(campaign.tiersJson || '[]');
   const sortedTiers = [...tiers].sort((a, b) => Number(a.quantity) - Number(b.quantity));
 
   let goalQuantity = 0;
-  let progressPercent = 0;
+  let fakePercent = 0;
+  let realPercent = 0;
   let progressText = `${totalProgress}`;
   let finalDiscountTier = null;
 
@@ -216,23 +224,23 @@ export default function CampaignOrdersPage() {
     const finalGoalTier = sortedTiers[sortedTiers.length - 1];
     const nextGoalTier = sortedTiers.find(tier => totalProgress < Number(tier.quantity));
     
-    // Use the next tier as the goal, or the final tier if all are met
     goalQuantity = nextGoalTier ? Number(nextGoalTier.quantity) : Number(finalGoalTier.quantity);
     
     if (goalQuantity > 0) {
-      progressPercent = Math.min((totalProgress / goalQuantity) * 100, 100);
+      // Calculate fake bar width
+      fakePercent = Math.min((fakeCount / goalQuantity) * 100, 100);
+      // Calculate real bar width (capped so it never breaks out of the 100% container)
+      realPercent = Math.min((realCount / goalQuantity) * 100, 100 - fakePercent);
     }
     progressText = `${totalProgress} / ${goalQuantity}`;
     
-    // Find the highest tier that has been *achieved*
     const achievedTiers = [...tiers].sort((a, b) => Number(b.quantity) - Number(a.quantity));
     finalDiscountTier = achievedTiers.find(tier => totalProgress >= Number(tier.quantity));
   }
   
   const scopeLabel = campaign.scope === 'PRODUCT' ? 'Product-wide' : 'Per-Variant';
   const countingLabel = campaign.countingMethod === 'ITEM_QUANTITY' ? 'By Item Quantity' : 'By Participants';
-  // --- END NEW LOGIC ---
-
+  // --- END MULTI-SEGMENT LOGIC ---
 
   const rowMarkup = rows.map((row, index) => {
     return (
@@ -243,7 +251,9 @@ export default function CampaignOrdersPage() {
             target="_top"
             removeUnderline
           >
-            {row.orderName}
+            <Text variant="bodyMd" fontWeight="bold" as="span">
+              {row.orderName}
+            </Text>
           </Link>
         </IndexTable.Cell>
         <IndexTable.Cell>
@@ -264,6 +274,11 @@ export default function CampaignOrdersPage() {
             {row.paymentStatus.replace('_', ' ')}
           </Badge>
         </IndexTable.Cell>
+        <IndexTable.Cell>
+          <Badge tone={getFulfillmentBadgeTone(row.fulfillmentStatus)}>
+            {row.fulfillmentStatus.replace('_', ' ')}
+          </Badge>
+        </IndexTable.Cell>
       </IndexTable.Row>
     );
   });
@@ -274,80 +289,142 @@ export default function CampaignOrdersPage() {
       backAction={{ content: 'Campaigns', url: '/app' }}
     >
       <Layout>
-        <Layout.Section>
+        {/* --- CARD 1: PRODUCT DETAILS --- */}
+        <Layout.Section variant="oneThird">
           <Card>
-            <BlockStack gap="500">
-            
-              {/* --- ✅ NEW: Progress Bar Section --- */}
-              <BlockStack gap="200">
-                <Text as="h3" variant="headingSm" tone="subdued">
-                  {progressLabel}
-                </Text>
-                <ProgressBar progress={progressPercent} tone="primary" size="small" />
-                <Text as="p" variant="bodyMd" fontWeight="semibold" alignment="end">
-                  {progressText}
-                </Text>
-              </BlockStack>
-              {/* --- END Progress Bar --- */}
+            <BlockStack gap="400">
+              <Text as="h2" variant="headingMd">Product Details</Text>
+              <Box paddingBlockStart="200" paddingBlockEnd="200">
+                <InlineStack blockAlign="center" gap="400" wrap={false}>
+                  <Thumbnail 
+                    source={campaign.productImage || ''} 
+                    alt={campaign.productTitle} 
+                    size="large"
+                  />
+                  <Text as="span" variant="bodyLg" fontWeight="bold">
+                    {campaign.productTitle}
+                  </Text>
+                </InlineStack>
+              </Box>
               
+              {campaign.scope === 'VARIANT' && variantOptions.length > 0 && (
+                <Box paddingBlockStart="200">
+                  <Select
+                    label="Filter by Variant"
+                    options={variantOptions}
+                    onChange={handleVariantChange}
+                    value={selectedVariantId}
+                  />
+                </Box>
+              )}
+            </BlockStack>
+          </Card>
+        </Layout.Section>
+
+        {/* --- CARD 2: CAMPAIGN DETAILS --- */}
+        <Layout.Section variant="twoThirds">
+          <Card>
+            <BlockStack gap="400">
+              <Text as="h2" variant="headingMd">Campaign Progress</Text>
+              
+              <Box paddingBlockEnd="400">
+                <BlockStack gap="200">
+                  <InlineStack align="space-between">
+                    <Text as="h3" variant="headingSm" tone="subdued">
+                      {progressLabel}
+                    </Text>
+                    <Text as="p" variant="bodyMd" fontWeight="semibold">
+                      {progressText}
+                    </Text>
+                  </InlineStack>
+                  
+                  {/* ✅ NEW: Custom Multi-Color Stacked Progress Bar */}
+                  <div style={{ 
+                    width: '100%', 
+                    height: '8px', 
+                    backgroundColor: 'var(--p-color-bg-surface-secondary-active, #e3e3e3)', 
+                    borderRadius: '4px', 
+                    display: 'flex', 
+                    overflow: 'hidden' 
+                  }}>
+                    {/* Fake Count Segment (Lighter info color) */}
+                    <div 
+                      style={{ width: `${fakePercent}%`, backgroundColor: 'var(--p-color-bg-surface-info, #91c0ff)', transition: 'width 0.3s ease' }} 
+                      title={`Boosted Participants: ${fakeCount}`}
+                    />
+                    {/* Real Count Segment (Primary info color) */}
+                    <div 
+                      style={{ width: `${realPercent}%`, backgroundColor: 'var(--p-color-bg-fill-info, #005bd3)', transition: 'width 0.3s ease' }} 
+                      title={`Real Orders: ${realCount}`}
+                    />
+                  </div>
+                  
+                  {/* ✅ NEW: Mini Legend */}
+                  <InlineStack gap="300">
+                    <InlineStack gap="100" blockAlign="center">
+                      <div style={{ width: '8px', height: '8px', borderRadius: '2px', backgroundColor: 'var(--p-color-bg-fill-info, #005bd3)' }} />
+                      <Text as="span" variant="bodySm" tone="subdued">Real Orders ({realCount})</Text>
+                    </InlineStack>
+                    {fakeCount > 0 && (
+                      <InlineStack gap="100" blockAlign="center">
+                        <div style={{ width: '8px', height: '8px', borderRadius: '2px', backgroundColor: 'var(--p-color-bg-surface-info, #91c0ff)' }} />
+                        <Text as="span" variant="bodySm" tone="subdued">Fake Count ({fakeCount})</Text>
+                      </InlineStack>
+                    )}
+                  </InlineStack>
+                </BlockStack>
+              </Box>
+
               <DescriptionList
                 items={[
-                  {
-                    term: 'Product',
-                    description: (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <Thumbnail source={campaign.productImage} alt={campaign.productTitle} />
-                        <Text as="span" fontWeight="semibold">{campaign.productTitle}</Text>
-                      </div>
-                    ),
-                  },
-                  ...(campaign.scope === 'VARIANT' ? [{
-                    term: 'Viewing Variant',
-                    description: (
-                      <Select
-                        options={variantOptions}
-                        onChange={handleVariantChange}
-                        value={selectedVariantId}
-                      />
-                    )
-                  }] : []),
-                  {
-                    term: 'Campaign Scope',
-                    description: scopeLabel
-                  },
-                  {
-                    term: 'Counting Method',
-                    description: countingLabel
-                  },
-                  { term: 'Discount Achieved', description: finalDiscountTier ? `${finalDiscountTier.discount}% off` : 'None' },
+                  { term: 'Campaign Scope', description: scopeLabel },
+                  { term: 'Counting Method', description: countingLabel },
+                  { term: 'Leader Discount', description: campaign.leaderDiscount > 0 ? `${campaign.leaderDiscount}% off` : 'Disabled' },
+                  { term: 'Discount Achieved', description: finalDiscountTier ? `${finalDiscountTier.discount}% off` : 'None (Goal not met)' },
                 ]}
               />
             </BlockStack>
           </Card>
         </Layout.Section>
 
+        {/* --- CARD 3: ORDERS TABLE --- */}
         <Layout.Section>
           <Card padding="0">
+            <Box padding="400" paddingBlockEnd="0">
+              <Text as="h2" variant="headingMd">Participant Orders</Text>
+            </Box>
+            
             {rows.length > 0 ? (
-              <IndexTable
-                itemCount={rows.length}
-                headings={[
-                  { title: 'Order' },
-                  { title: 'Date' },
-                  { title: 'Customer' },
-                  { title: 'Variant' },
-                  { title: 'Qty' },
-                  { title: 'Role' },
-                  { title: 'Payment Status' },
-                ]}
-                selectable={false}
-              >
-                {rowMarkup}
-              </IndexTable>
+              <Box paddingBlockStart="400">
+                <IndexTable
+                  itemCount={rows.length}
+                  headings={[
+                    { title: 'Order' },
+                    { title: 'Date' },
+                    { title: 'Customer' },
+                    { title: 'Variant' },
+                    { title: 'Qty' },
+                    { title: 'Role' },
+                    { title: 'Payment' },
+                    { title: 'Fulfillment' },
+                  ]}
+                  selectable={false}
+                >
+                  {rowMarkup}
+                </IndexTable>
+              </Box>
             ) : (
-              <div style={{ padding: '16px', textAlign: 'center' }}>
-                <Text as="p">No orders have been placed for this campaign {campaign.scope === 'VARIANT' ? 'for this variant' : ''} yet.</Text>
-              </div>
+              <Box padding="800">
+                <EmptyState
+                  heading="No orders found"
+                  image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
+                >
+                  <p>
+                    There are currently no orders for this campaign
+                    {campaign.scope === 'VARIANT' ? ' for the selected variant.' : '.'}
+                  </p>
+                </EmptyState>
+              </Box>
             )}
           </Card>
         </Layout.Section>

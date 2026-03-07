@@ -67,7 +67,7 @@ export function DateTimePicker({
   };
 
   const hours = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'));
-  const minutes = ['00', '15', '30', '45'];
+  const minutes = ['00', '10', '20', '30', '40', '50'];
 
   // --- 🔒 UNTOUCHED LOGIC: Disabling past times ---
   const isTimeDead = (type, val) => {
@@ -191,7 +191,7 @@ export function DateTimePicker({
                {curM}
              </button>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: timeMode === 'hour' ? 'repeat(4, 1fr)' : 'repeat(2, 1fr)', gap: '8px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: timeMode === 'hour' ? 'repeat(4, 1fr)' : 'repeat(3, 1fr)', gap: '8px' }}>
              {(timeMode === 'hour' ? hours : minutes).map(val => {
                const dead = isTimeDead(timeMode, val);
                const isSelected = (timeMode === 'hour' ? curH : curM) === val;

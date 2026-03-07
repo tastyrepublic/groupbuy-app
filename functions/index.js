@@ -1,9 +1,8 @@
 const { onMessagePublished } = require("firebase-functions/v2/pubsub");
 const admin = require("firebase-admin");
-const { FieldValue } = require("firebase-admin/firestore");
+const FieldValue = admin.firestore.FieldValue;
 const { PrismaClient } = require("@prisma/client");
-const { onSchedule } = require("firebase-functions/v2/scheduler"); // ✅ Added for Sweeper
-// --- Replace your old node-fetch line with this one ---
+const { onSchedule } = require("firebase-functions/v2/scheduler"); 
 const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
 
 // Initialize Firebase Admin for Firestore access
@@ -14,37 +13,8 @@ const firestore = admin.firestore();
 const prisma = new PrismaClient();
 
 // ============================================================================
-// 🛒 WEBHOOK: Calculates progress based on the campaign's scope
+// 🛒 WEBHOOK: Processes orders and uses Atomic Increments for progress
 // ============================================================================
-async function calculateNewProgress(campaign, fullVariantId) {
-  let currentProgress = 0;
-  
-  if (campaign.scope === 'PRODUCT') {
-    const participants = await prisma.participant.findMany({
-      where: { group: { campaignId: campaign.id } }
-    });
-    
-    if (campaign.countingMethod === 'ITEM_QUANTITY') {
-      currentProgress = participants.reduce((sum, p) => sum + p.quantity, 0);
-    } else {
-      currentProgress = new Set(participants.map(p => p.customerId)).size;
-    }
-  } else { // 'VARIANT' scope
-    const participants = await prisma.participant.findMany({
-      where: {
-        group: { campaignId: campaign.id },
-        productVariantId: fullVariantId 
-      }
-    });
-    
-    if (campaign.countingMethod === 'ITEM_QUANTITY') {
-      currentProgress = participants.reduce((sum, p) => sum + p.quantity, 0);
-    } else {
-      currentProgress = new Set(participants.map(p => p.customerId)).size;
-    }
-  }
-  return currentProgress + campaign.startingParticipants;
-}
 
 // 🚀 The Firebase Function triggered by Shopify Pub/Sub
 exports.processGroupBuyOrder = onMessagePublished("shopify-orders-create", async (event) => {
@@ -98,11 +68,26 @@ exports.processGroupBuyOrder = onMessagePublished("shopify-orders-create", async
         });
 
         if (!existingParticipant) {
+          // Check if this is the customer's first time participating to avoid double-counting "PARTICIPANTS"
+          const priorParticipation = await prisma.participant.findFirst({
+            where: {
+              customerId: customerId,
+              orderId: { not: orderId }, // Ignore the order we are processing right now
+              group: { campaignId: campaign.id },
+              ...(campaign.scope === 'VARIANT' ? { productVariantId: fullVariantId } : {})
+            }
+          });
+
+          const existingGroupMembers = await prisma.participant.count({
+            where: { groupId: group.id }
+          });
+          const isLeader = existingGroupMembers === 0 && campaign.startingParticipants === 0;
+
           await prisma.participant.create({
             data: {
               orderId,
               customerId,
-              isLeader: false,
+              isLeader: isLeader,
               groupId: group.id,
               quantity: item.quantity,
               productVariantId: fullVariantId, 
@@ -112,20 +97,33 @@ exports.processGroupBuyOrder = onMessagePublished("shopify-orders-create", async
           hasCreatedParticipant = true;
           console.log(`  ✅ Saved participant for variant ${item.variant_id} (Qty: ${item.quantity})`);
           
-          const newProgress = await calculateNewProgress(campaign, fullVariantId);
-          const simpleVariantId = item.variant_id;
-          
-          let docId = `campaign_${campaignId}`;
-          if (campaign.scope === 'VARIANT') {
-             docId = `campaign_${campaignId}_variant_${simpleVariantId}`;
+          // 1. Calculate how much to add (The Delta)
+          let progressDelta = 0;
+          if (campaign.countingMethod === 'ITEM_QUANTITY') {
+            progressDelta = item.quantity;
+          } else {
+            // Only add 1 if they haven't bought into this campaign/variant before
+            progressDelta = priorParticipation ? 0 : 1;
           }
 
-          await firestore.collection("campaignProgress").doc(docId).set({
-            progress: newProgress,
-            updatedAt: FieldValue.serverTimestamp()
-          }, { merge: true });
-          
-          console.log(`  🚀 Updated Firestore document ${docId} with progress: ${newProgress}`);
+          if (progressDelta > 0) {
+            const simpleVariantId = item.variant_id;
+            let docId = `campaign_${campaignId}`;
+            if (campaign.scope === 'VARIANT') {
+               docId = `campaign_${campaignId}_variant_${simpleVariantId}`;
+            }
+
+            // 2. Use Firestore Atomic Increment to prevent Race Conditions
+            await firestore.collection("campaignProgress").doc(docId).set({
+              progress: FieldValue.increment(progressDelta),
+              updatedAt: FieldValue.serverTimestamp()
+            }, { merge: true });
+            
+            console.log(`  🚀 Atomically incremented Firestore document ${docId} by: ${progressDelta}`);
+          } else {
+            console.log(`  -> Customer already counted for this campaign. No increment needed.`);
+          }
+
         } else {
           console.log(`  -> Participant already exists for order ${orderId}, skipping duplicate.`);
         }
@@ -163,8 +161,8 @@ async function shopifyGraphQL(shop, accessToken, query, variables = {}) {
   return response.json();
 }
 
-// --- HELPER 1: Process Success (Includes finalCapture Fix) ---
-async function processParticipants(participants, finalDiscountTier, shop, accessToken) {
+// --- HELPER 1: Process Success ---
+async function processParticipants(participants, finalDiscountTier, shop, accessToken, campaign) {
   for (const participant of participants) {
     console.log(`   - Processing order ${participant.orderId}...`);
     try {
@@ -196,6 +194,18 @@ async function processParticipants(participants, finalDiscountTier, shop, access
       )?.node;
       
       if (lineItemToDiscount) {
+        // ✅ 2. Determine which discount to apply
+        const isEligibleForLeaderDiscount = participant.isLeader && campaign.leaderDiscount && parseFloat(campaign.leaderDiscount) > 0;
+        
+        const discountPercentage = isEligibleForLeaderDiscount 
+          ? parseFloat(campaign.leaderDiscount) 
+          : parseFloat(finalDiscountTier.discount);
+
+        const discountDescription = isEligibleForLeaderDiscount
+          ? "Group Buy Leader Discount"
+          : "Group Buy Discount";
+
+        // ✅ 3. Apply the calculated discount
         await shopifyGraphQL(shop, accessToken,
           `mutation orderEditAddLineItemDiscount($id: ID!, $lineItemId: ID!, $discount: OrderEditAppliedDiscountInput!) {
             orderEditAddLineItemDiscount(id: $id, lineItemId: $lineItemId, discount: $discount) {
@@ -205,7 +215,7 @@ async function processParticipants(participants, finalDiscountTier, shop, access
           {
             id: calculatedOrderId,
             lineItemId: lineItemToDiscount.id,
-            discount: { percentValue: parseFloat(finalDiscountTier.discount), description: "Group Buy Discount" }
+            discount: { percentValue: discountPercentage, description: discountDescription }
           }
         );
       }
@@ -345,7 +355,7 @@ exports.campaignFinalizer = onSchedule("every 5 minutes", async (event) => {
         if (finalDiscountTier && allParticipants.length > 0) {
           console.log(`   ✅ Success! Reached ${finalDiscountTier.quantity} for ${finalDiscountTier.discount}% off.`);
           anyVariantSucceeded = true;
-          await processParticipants(allParticipants, finalDiscountTier, campaign.shop, session.accessToken);
+          await processParticipants(allParticipants, finalDiscountTier, campaign.shop, session.accessToken, campaign);
         } else {
           console.log("   -> Campaign failed. Canceling all orders.");
           await cancelFailedOrders(allParticipants, campaign.shop, session.accessToken);
@@ -371,9 +381,8 @@ exports.campaignFinalizer = onSchedule("every 5 minutes", async (event) => {
           if (finalDiscountTier) {
             console.log(`   ✅ Variant ${variantId.split('/').pop()} Success! Applying ${finalDiscountTier.discount}% off.`);
             anyVariantSucceeded = true;
-            await processParticipants(participantsForThisVariant, finalDiscountTier, campaign.shop, session.accessToken);
+            await processParticipants(participantsForThisVariant, finalDiscountTier, campaign.shop, session.accessToken, campaign);
           } else {
-            // ✅ New: Handle Individual Variant Failure
             console.log(`   -> Variant ${variantId.split('/').pop()} failed. Canceling variant orders.`);
             await cancelFailedOrders(participantsForThisVariant, campaign.shop, session.accessToken);
           }
