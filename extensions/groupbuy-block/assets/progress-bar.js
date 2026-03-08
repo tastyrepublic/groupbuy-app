@@ -138,8 +138,10 @@ function fetchAndRenderCampaign(container, variantId) {
     })
     .then(data => {
       if (loadingContainer) loadingContainer.classList.add('gb-fade-out');
+      
       setTimeout(() => {
         if (data && data.campaign) {
+          // A campaign was found! Set it up:
           container.dataset.campaignId = data.campaign.id;
           container.dataset.scope = data.campaign.scope || 'PRODUCT';
           container.dataset.validVariants = data.campaign.selectedVariantIdsJson || '[]';
@@ -151,7 +153,12 @@ function fetchAndRenderCampaign(container, variantId) {
             renderScheduledCampaign(container, data.campaign);
           }
         } else {
-          container.innerHTML = '';
+          // NO CAMPAIGN FOUND: Log the helpful message from the backend!
+          if (data && data.message) {
+             console.log(`🛍️ Group Buy Widget: ${data.message}`);
+          }
+          // Smoothly erase the widget
+          container.innerHTML = ''; 
         }
       }, 300);
     })
@@ -359,7 +366,7 @@ function initializeJoinButton(container) {
 
   const setupButton = (text) => {
     const newJoinButton = joinButton.cloneNode(true);
-    newJoinButton.textContent = text; // Set the text
+    newJoinButton.textContent = text; 
     joinButton.parentNode.replaceChild(newJoinButton, joinButton);
 
     newJoinButton.addEventListener('click', () => {
@@ -377,8 +384,8 @@ function initializeJoinButton(container) {
             shop, 
             productId, 
             quantity, 
-            customerId,
-            groupBuyFilterEnabled: true 
+            customerId
+            // ✅ REMOVED: groupBuyFilterEnabled (The backend handles the Selling Plan natively now!)
         }), 
       })
       .then(response => {

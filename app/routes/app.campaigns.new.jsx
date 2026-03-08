@@ -16,15 +16,19 @@ export const action = async ({ request }) => {
   
   const errors = { tiers: [], schedule: {}, product: null, leaderDiscount: null, form: null };
 
+  // --- EXTRACT ALL DATA ONCE ---
   const productId = formData.get("productId");
+  const productTitle = formData.get("productTitle") || "Untitled Product"; // Added fallback
+  const scope = formData.get("scope") || "PRODUCT"; // Added extraction!
+  
+  const selectedVariantIdsJson = formData.get("selectedVariantIdsJson");
+  const selectedVariantIds = selectedVariantIdsJson ? JSON.parse(selectedVariantIdsJson) : [];
+
   if (!productId) {
     errors.product = "You must select a product.";
   }
 
-  const selectedVariantIdsJson = formData.get("selectedVariantIdsJson");
-  const selectedVariantIds = selectedVariantIdsJson ? JSON.parse(selectedVariantIdsJson) : [];
-
-  if (selectedVariantIds.length === 0) {
+  if (scope === 'VARIANT' && selectedVariantIds.length === 0) {
       errors.product = "You must select at least one product variant.";
   }
   
@@ -58,7 +62,13 @@ export const action = async ({ request }) => {
   }
 
   try {
-    // 1. Publish to Sales Channel (Keep this part)
+    /* ========================================================
+    DISABLED: SALES CHANNEL PUBLICATION
+    We are a Theme App Extension, not a Sales Channel. 
+    Uncomment this if we ever build a custom marketplace app.
+    ========================================================
+    
+    // 1. Publish to Sales Channel
     const appPublicationQuery = `query { currentAppInstallation { publication { id } } }`;
     const pubResponse = await admin.graphql(appPublicationQuery);
     const { data: pubData } = await pubResponse.json();
@@ -75,13 +85,104 @@ export const action = async ({ request }) => {
     await admin.graphql(publishMutation, {
       variables: { "productId": productId, "publicationId": appPublicationId }
     });
+    */
 
-    // 2. Create the campaign (Keep this part)
+    // --- 2. BUILD THE SELLING PLAN RESOURCES ---
+    let planResources = {};
+    
+    if (scope === 'VARIANT' && selectedVariantIds.length > 0) {
+      planResources = {
+        productVariantIds: selectedVariantIds.map(id => 
+          id.includes('gid://') ? id : `gid://shopify/ProductVariant/${id}`
+        )
+      };
+    } else {
+      planResources = { productIds: [productId] };
+    }
+
+    // --- 3. FORMAT THE BILLING DEADLINE ---
+    // Add a 15-minute buffer so the Sweeper has time to apply the discount!
+    const billingDate = new Date(endDateTimeUtc);
+    billingDate.setMinutes(billingDate.getMinutes() + 15);
+    const exactBillingTime = billingDate.toISOString();
+
+    // --- 4. CREATE THE SELLING PLAN IN SHOPIFY ---
+    const sellingPlanResponse = await admin.graphql(
+      `#graphql
+      mutation createDeferredSellingPlan($input: SellingPlanGroupInput!, $resources: SellingPlanGroupResourceInput) {
+        sellingPlanGroupCreate(input: $input, resources: $resources) {
+          sellingPlanGroup {
+            id
+            sellingPlans(first: 1) {
+              edges {
+                node {
+                  id
+                }
+              }
+            }
+          }
+          userErrors {
+            field
+            message
+          }
+        }
+      }`,
+      {
+        variables: {
+          input: {
+            name: `Group Buy: ${productTitle}`, 
+            merchantCode: `groupbuy-${Date.now()}`,
+            options: ["Payment Schedule"],
+            sellingPlansToCreate: [
+              {
+                name: "Join Group Buy ($0 Today)",
+                category: "PRE_ORDER",
+                options: ["$0 today, charged when campaign succeeds"],
+                billingPolicy: {
+                  fixed: {
+                    checkoutCharge: {
+                      type: "PRICE",
+                      value: { fixedValue: 0 }
+                    },
+                    remainingBalanceChargeTrigger: "EXACT_TIME",
+                    remainingBalanceChargeExactTime: exactBillingTime
+                  }
+                },
+                inventoryPolicy: {
+                  reserve: "ON_FULFILLMENT"
+                },
+                deliveryPolicy: {
+                  fixed: {
+                    intent: "FULFILLMENT_BEGIN",
+                    fulfillmentTrigger: "UNKNOWN"
+                  }
+                }
+              }
+            ]
+          },
+          resources: planResources 
+        }
+      }
+    );
+
+    const planData = await sellingPlanResponse.json();
+
+    // 🛑 ADD THIS TRAP RIGHT HERE:
+    console.log("🚨 SHOPIFY RAW RESPONSE:", JSON.stringify(planData, null, 2));
+    
+    if (planData?.data?.sellingPlanGroupCreate?.userErrors?.length > 0) {
+      console.error("Selling Plan Error:", planData.data.sellingPlanGroupCreate.userErrors);
+      return json({ errors: { form: "Failed to create Shopify Selling Plan. Please try again." } }, { status: 400 });
+    }
+
+    const newSellingPlanGroupId = planData.data.sellingPlanGroupCreate.sellingPlanGroup.id;
+
+    // --- 5. SAVE TO DATABASE ---
     const newCampaign = await db.campaign.create({
       data: {
         shop: session.shop,
-        productId: formData.get("productId"),
-        productTitle: formData.get("productTitle"),
+        productId: productId, // Uses extracted variable
+        productTitle: productTitle, // Uses extracted variable
         productImage: formData.get("productImage"),
         selectedVariantIdsJson: selectedVariantIdsJson,
         startDateTime: startDateTimeUtc,
@@ -91,19 +192,17 @@ export const action = async ({ request }) => {
         tiersJson: JSON.stringify(tiers),
         status: "ACTIVE",
         startingParticipants: parseInt(formData.get("startingParticipants"), 10) || 0,
-        scope: formData.get("scope"),
+        scope: scope, // Uses extracted variable
         countingMethod: formData.get("countingMethod"),
+        sellingPlanGroupId: newSellingPlanGroupId, // ✅ Includes the new Shopify ID!
       },
     });
-
-    // ✅ THE FIX: The crashing line was removed from here.
 
     return redirect(`/app/campaigns/${newCampaign.id}?success=true`);
 
   } catch (error) {
     console.error("Error creating campaign:", error);
-    errors.form = "An unexpected error occurred while creating the campaign. Please try again.";
-    return json({ errors }, { status: 500 });
+    return json({ errors: { form: "An unexpected error occurred while creating the campaign." } }, { status: 500 });
   }
 };
 

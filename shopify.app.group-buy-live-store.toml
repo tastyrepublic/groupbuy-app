@@ -1,0 +1,47 @@
+# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+
+client_id = "c0d6d1a1c4983a0fef8e075ba7074bcc"
+name = "Group Buy (Live Store)"
+application_url = "https://institution-rochester-oakland-refers.trycloudflare.com/"
+embedded = true
+
+[build]
+automatically_update_urls_on_dev = true
+
+[webhooks]
+api_version = "2026-01"
+
+  [[webhooks.subscriptions]]
+  topics = [ "app/scopes_update" ]
+  uri = "/webhooks/app/scopes_update"
+
+  [[webhooks.subscriptions]]
+  topics = [ "app/uninstalled" ]
+  uri = "/webhooks/app/uninstalled"
+
+  [[webhooks.subscriptions]]
+  topics = [ "orders/paid" ]
+  uri = "pubsub://groupbuy-app-635bf:shopify-orders-paid"
+
+  [[webhooks.subscriptions]]
+  topics = [ "orders/create" ]
+  uri = "pubsub://groupbuy-app-635bf:shopify-orders-create"
+
+[access_scopes]
+# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
+scopes = "read_checkouts,read_customers,read_orders,read_payment_customizations,read_publications,read_purchase_options,unauthenticated_read_checkouts,unauthenticated_read_product_listings,unauthenticated_write_checkouts,write_app_proxy,write_checkouts,write_order_edits,write_orders,write_payment_customizations,write_products,write_publications,write_purchase_options"
+
+[auth]
+redirect_urls = [
+  "https://institution-rochester-oakland-refers.trycloudflare.com/api/auth/callback",
+  "https://institution-rochester-oakland-refers.trycloudflare.com/api/auth/shopify/callback",
+  "https://institution-rochester-oakland-refers.trycloudflare.com/api/api/auth/callback"
+]
+
+[app_proxy]
+url = "https://institution-rochester-oakland-refers.trycloudflare.com/api"
+subpath = "gbs"
+prefix = "apps"
+
+[pos]
+embedded = false

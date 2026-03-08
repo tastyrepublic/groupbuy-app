@@ -122,16 +122,60 @@ export const loader = async ({ request }) => {
 };
 
 export const action = async ({ request }) => {
+  // 1. Authenticate to get the Shopify admin object
+  const { admin } = await authenticate.admin(request);
   const formData = await request.formData();
 
   if (formData.get("_action") === "delete") {
-    const campaignId = formData.get("campaignId");
-    await db.campaign.delete({
-      where: { id: parseInt(campaignId, 10) },
+    const campaignId = parseInt(formData.get("campaignId"), 10);
+    
+    // 2. Fetch the campaign to get the Selling Plan ID before we delete it
+    const campaign = await db.campaign.findUnique({
+      where: { id: campaignId }
     });
+
+    // 3. Delete the Selling Plan from Shopify
+    if (campaign && campaign.sellingPlanGroupId) {
+      console.log(`🧹 Attempting to delete Shopify Selling Plan: ${campaign.sellingPlanGroupId}`);
+      try {
+        const response = await admin.graphql(
+          `#graphql
+          mutation sellingPlanGroupDelete($id: ID!) {
+            sellingPlanGroupDelete(id: $id) {
+              deletedSellingPlanGroupId
+              userErrors { field message }
+            }
+          }`,
+          {
+            variables: { id: campaign.sellingPlanGroupId }
+          }
+        );
+        
+        const responseJson = await response.json();
+        const errors = responseJson.data?.sellingPlanGroupDelete?.userErrors || [];
+        
+        if (errors.length > 0) {
+          console.error("❌ Shopify refused to delete the Selling Plan. Reason:", errors);
+        } else {
+          console.log("✅ Selling Plan successfully deleted from Shopify!");
+        }
+      } catch (error) {
+        console.error("❌ Fatal error communicating with Shopify:", error);
+      }
+    } else {
+      console.log("⚠️ WARNING: No sellingPlanGroupId found in the database for this campaign. Skipping Shopify deletion.");
+    }
+
+    // 4. Finally, delete the campaign from your Prisma database
+    await db.campaign.delete({
+      where: { id: campaignId },
+    });
+    
     return json({ success: true });
   }
-}
+  
+  return json({ error: "Invalid action" }, { status: 400 });
+};
 
 function DeleteCampaignButton({ campaignId, fetcher, isEnded, hasOrders }) {
   const [isModalOpen, setIsModalOpen] = useState(false);

@@ -1,9 +1,14 @@
-{% comment %}
-  Load your CSS file as usual
-{% endcomment %}
-{{ 'progress-bar.css' | asset_url | stylesheet_tag }}
+{% schema %}
+  {
+    "name": "Group Buy Widget",
+    "target": "section",
+    "settings": []
+  }
+{% endschema %}
 
-<script type="module" src="{{ 'progress-bar.js' | asset_url }}" defer="defer"></script>
+{{ 'progress-bar.css' | asset_url | stylesheet_tag }}
+{% comment %} Switch from debug-test.js back to your real logic {% endcomment %}
+<script type="module" src="{{ 'progress-bar.js' | asset_url }}"></script>
 
 <div class="gb-widget" 
   data-product-id="{{ product.id }}"
@@ -18,12 +23,3 @@
     <p>Loading Group Buy Deal...</p>
   </div>
 </div>
-
-{% schema %}
-  {
-    "name": "Group Buy Widget",
-    "target": "section",
-    "stylesheet": "progress-bar.css",
-    "settings": []
-  }
-{% endschema %}

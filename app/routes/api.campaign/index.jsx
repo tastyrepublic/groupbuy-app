@@ -26,14 +26,26 @@ export const loader = async ({ request }) => {
       },
     });
 
-    if (potentialCampaigns.length === 0) return json({ campaign: null }, { status: 404 });
+    // If NO campaigns exist for this product at all
+    if (potentialCampaigns.length === 0) {
+      return json({ 
+        campaign: null, 
+        message: "No active Group Buy campaigns found for this product." 
+      }, { status: 200 });
+    }
 
     let campaign = potentialCampaigns.find(c => {
       const selectedIds = JSON.parse(c.selectedVariantIdsJson || '[]');
       return selectedIds.includes(fullVariantId);
     });
 
-    if (!campaign) return json({ campaign: null }, { status: 404 });
+    // If a campaign exists, but THIS specific variant isn't included
+    if (!campaign) {
+      return json({ 
+        campaign: null, 
+        message: "Group Buy exists, but this specific variant is excluded." 
+      }, { status: 200 });
+    }
 
     const campaignStatus = new Date(campaign.startDateTime) > now ? "SCHEDULED" : "ACTIVE";
     

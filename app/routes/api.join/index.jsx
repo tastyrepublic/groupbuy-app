@@ -8,7 +8,8 @@ export const action = async ({ request }) => {
   }
 
   try {
-    const { shop, variantId, productId, quantity, customerId, groupBuyFilterEnabled } = await request.json();
+    // We removed groupBuyFilterEnabled because we don't need it anymore!
+    const { shop, variantId, productId, quantity, customerId } = await request.json();
 
     if (!shop || !variantId || !productId) {
       return json({ error: "Shop, variant ID, and product ID are required." }, { status: 400 });
@@ -19,7 +20,7 @@ export const action = async ({ request }) => {
     const fullProductId = `gid://shopify/Product/${productId}`;
     const fullVariantId = `gid://shopify/ProductVariant/${simpleVariantId}`;
 
-    // 1. Find the active campaign
+    // 1. Find the active campaign in your database
     const now = new Date();
     const campaign = await db.campaign.findFirst({
       where: {
@@ -30,30 +31,38 @@ export const action = async ({ request }) => {
       },
     });
 
-    if (!campaign) {
-      return json({ error: "No active campaign found for this product." }, { status: 404 });
+    if (!campaign || !campaign.sellingPlanGroupId) {
+      return json({ error: "No active group buy found for this product." }, { status: 404 });
     }
 
-    // --- ✅ FIX: The "Participant Limit Check" block has been entirely removed ---
-    // Our progress-counting logic in the worker and campaign API already handles
-    // unique participants, so this check was only blocking sales.
+    // --- ✅ NEW: 2. FETCH THE SPECIFIC SELLING PLAN ID ---
+    // We have the Group ID in the database, but the Cart needs the specific Plan ID
+    const { admin } = await shopify.unauthenticated.admin(shop);
+    
+    const planQuery = await admin.graphql(
+      `#graphql
+      query getSellingPlan($id: ID!) {
+        sellingPlanGroup(id: $id) {
+          sellingPlans(first: 1) {
+            edges {
+              node {
+                id
+              }
+            }
+          }
+        }
+      }`,
+      { variables: { id: campaign.sellingPlanGroupId } }
+    );
+    
+    const planData = await planQuery.json();
+    const sellingPlanId = planData.data?.sellingPlanGroup?.sellingPlans?.edges[0]?.node?.id;
 
-    // --- 🚨 2. CONSTRUCT THE ATTRIBUTES ARRAY 🚨 ---
-    // Start with the required campaign ID attribute
-    const attributes = [{
-      key: "_groupbuy_campaign_id",
-      value: campaign.id.toString(),
-    }];
-
-    // Add the payment filter flag ONLY if it was enabled by the frontend.
-    if (groupBuyFilterEnabled) {
-        attributes.push({
-            key: "_group_buy_checkout", 
-            value: "true", // The exact value your Shopify Function is checking for
-        });
+    if (!sellingPlanId) {
+       return json({ error: "Could not locate the deferred payment plan." }, { status: 500 });
     }
 
-    const merchandiseId = fullVariantId;
+    // --- ✅ NEW: 3. CREATE CART WITH THE SELLING PLAN ---
     const { storefront } = await shopify.unauthenticated.storefront(shop);
 
     const mutation = `
@@ -67,9 +76,18 @@ export const action = async ({ request }) => {
     const response = await storefront.graphql(mutation, {
       variables: {
         input: {
-          lines: [{ merchandiseId, quantity: quantity || 1 }],
-          // 🚨 3. USE THE DYNAMICALLY BUILT ATTRIBUTES ARRAY 🚨
-          attributes: attributes, 
+          // The Selling Plan ID goes DIRECTLY into the line item!
+          lines: [{ 
+            merchandiseId: fullVariantId, 
+            quantity: quantity || 1,
+            sellingPlanId: sellingPlanId 
+          }],
+          // We keep the campaign ID as a cart attribute just so it's easy for you 
+          // to see in the Shopify Admin Order page, but it's no longer the "only" link!
+          attributes: [{
+            key: "_groupbuy_campaign_id",
+            value: campaign.id.toString(),
+          }]
         },
       },
     });

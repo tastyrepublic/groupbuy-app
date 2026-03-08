@@ -53,6 +53,7 @@ model Campaign {
 // --- NEW FIELDS ---
   startingParticipants Int    @default(0) // For the marketing boost
   schedulerJobName     String?  // To track the Google Cloud Scheduler job
+  sellingPlanGroupId  String?
 
 // A Campaign can have many Groups
   groups             Group[]

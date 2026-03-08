@@ -17,6 +17,10 @@ api_version = "2025-07"
   uri = "pubsub://groupbuy-app-635bf:shopify-orders-create"
 
   [[webhooks.subscriptions]]
+  topics = [ "orders/paid" ]
+  uri = "pubsub://groupbuy-app-635bf:shopify-orders-paid"
+
+  [[webhooks.subscriptions]]
   topics = [ "app/uninstalled" ]
   uri = "/webhooks/app/uninstalled"
 
@@ -31,7 +35,7 @@ prefix = "apps"
 
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-scopes = "write_products, write_orders, read_orders, read_checkouts, write_checkouts, unauthenticated_write_checkouts, unauthenticated_read_checkouts, unauthenticated_read_product_listings, write_app_proxy, write_order_edits, read_customers, read_publications, write_publications, write_payment_customizations, read_payment_customizations"
+scopes = "write_products, write_orders, read_orders, read_checkouts, write_checkouts, unauthenticated_write_checkouts, unauthenticated_read_checkouts, unauthenticated_read_product_listings, write_app_proxy, write_order_edits, read_customers, read_publications, write_publications, write_payment_customizations, read_payment_customizations, write_purchase_options, read_purchase_options, write_payment_mandate, read_payment_mandate, read_customer_payment_methods"
 
 [auth]
 redirect_urls = ["https://traditional-happening-alex-ccd.trycloudflare.com/auth/callback", "https://traditional-happening-alex-ccd.trycloudflare.com/auth/shopify/callback", "https://traditional-happening-alex-ccd.trycloudflare.com/api/auth/callback"]

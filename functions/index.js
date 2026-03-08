@@ -20,19 +20,21 @@ const prisma = new PrismaClient();
 exports.processGroupBuyOrder = onMessagePublished("shopify-orders-create", async (event) => {
   try {
     const message = event.data.message;
-    console.log("Raw Attributes from Shopify:", event.data.message.attributes);
-
     const payloadStr = Buffer.from(message.data, 'base64').toString();
     const payload = JSON.parse(payloadStr);
 
+    const orderId = payload.admin_graphql_api_id;
+    const customerId = payload.customer?.admin_graphql_api_id || payload.email || `guest-${orderId}`; 
+
+    // 1. Verify this is a Group Buy order using the cart attribute we securely injected
     const noteAttributes = payload.note_attributes || [];
     const groupbuyAttribute = noteAttributes.find(
       (attr) => attr.name === "_groupbuy_campaign_id"
     );
 
     if (!groupbuyAttribute) {
-      console.log("  -> Regular order. Skipping.");
-      return; 
+      console.log(`  -> Regular order. Skipping.`);
+      return;
     }
 
     const campaignId = parseInt(groupbuyAttribute.value, 10);
@@ -43,7 +45,7 @@ exports.processGroupBuyOrder = onMessagePublished("shopify-orders-create", async
       return; 
     }
 
-    console.log(`  ✅ This is a Group Buy order for campaign ${campaignId}!`);
+    console.log(`  ✅ Processing Group Buy order for campaign ${campaignId}!`);
 
     let group = await prisma.group.findFirst({
       where: { campaignId, status: "OPEN" },
@@ -54,55 +56,55 @@ exports.processGroupBuyOrder = onMessagePublished("shopify-orders-create", async
       group = await prisma.group.create({ data: { campaignId } });
     }
 
-    const orderId = payload.admin_graphql_api_id;
-    const customerId = payload.customer?.admin_graphql_api_id || payload.email || `guest-${orderId}`; 
-    let hasCreatedParticipant = false;
+    let hasProcessedAnyCampaignItem = false;
+    const validVariants = JSON.parse(campaign.selectedVariantIdsJson || '[]');
 
+    // 2. Loop through the line items and process the ones that match our campaign
     for (const item of payload.line_items) {
       const fullVariantId = `gid://shopify/ProductVariant/${item.variant_id}`;
-      const validVariants = JSON.parse(campaign.selectedVariantIdsJson || '[]');
       
+      // If the variant in the cart matches the campaign's variants, count it!
       if (validVariants.includes(fullVariantId)) {
         const existingParticipant = await prisma.participant.findFirst({
           where: { orderId, productVariantId: fullVariantId }
         });
 
         if (!existingParticipant) {
-          // Check if this is the customer's first time participating to avoid double-counting "PARTICIPANTS"
-          const priorParticipation = await prisma.participant.findFirst({
-            where: {
-              customerId: customerId,
-              orderId: { not: orderId }, // Ignore the order we are processing right now
-              group: { campaignId: campaign.id },
-              ...(campaign.scope === 'VARIANT' ? { productVariantId: fullVariantId } : {})
-            }
-          });
+          // 🚀 SPEED UPGRADE: Run the Reads in parallel
+          const [priorParticipation, existingGroupMembers] = await Promise.all([
+            prisma.participant.findFirst({
+              where: {
+                customerId: customerId,
+                orderId: { not: orderId }, 
+                group: { campaignId: campaign.id },
+                ...(campaign.scope === 'VARIANT' ? { productVariantId: fullVariantId } : {})
+              }
+            }),
+            prisma.participant.count({
+              where: { groupId: group.id }
+            })
+          ]);
 
-          const existingGroupMembers = await prisma.participant.count({
-            where: { groupId: group.id }
-          });
           const isLeader = existingGroupMembers === 0 && campaign.startingParticipants === 0;
 
+          // 🛡️ BULLETPROOF UPGRADE: Save to the main database FIRST
           await prisma.participant.create({
             data: {
-              orderId,
-              customerId,
-              isLeader: isLeader,
+              orderId, customerId, isLeader,
               groupId: group.id,
               quantity: item.quantity,
               productVariantId: fullVariantId, 
             },
           });
           
-          hasCreatedParticipant = true;
+          hasProcessedAnyCampaignItem = true;
           console.log(`  ✅ Saved participant for variant ${item.variant_id} (Qty: ${item.quantity})`);
           
-          // 1. Calculate how much to add (The Delta)
+          // 🛡️ ONLY IF Prisma succeeds, do we calculate and increment the progress bar!
           let progressDelta = 0;
           if (campaign.countingMethod === 'ITEM_QUANTITY') {
             progressDelta = item.quantity;
           } else {
-            // Only add 1 if they haven't bought into this campaign/variant before
             progressDelta = priorParticipation ? 0 : 1;
           }
 
@@ -113,7 +115,6 @@ exports.processGroupBuyOrder = onMessagePublished("shopify-orders-create", async
                docId = `campaign_${campaignId}_variant_${simpleVariantId}`;
             }
 
-            // 2. Use Firestore Atomic Increment to prevent Race Conditions
             await firestore.collection("campaignProgress").doc(docId).set({
               progress: FieldValue.increment(progressDelta),
               updatedAt: FieldValue.serverTimestamp()
@@ -130,13 +131,90 @@ exports.processGroupBuyOrder = onMessagePublished("shopify-orders-create", async
       }
     }
 
-    if (!hasCreatedParticipant) {
-      console.log("  -> Order was for campaign, but no matching variants found.");
+    if (!hasProcessedAnyCampaignItem) {
+      console.log("  -> Order processed, but no valid Group Buy items were found.");
     }
 
   } catch (error) {
     console.error("❌ Worker: Error processing message:", error);
     throw error;
+  }
+});
+
+// ============================================================================
+// 🚀 WEBHOOK: Auto-Release Fulfillment Hold when Payment Succeeds
+// ============================================================================
+exports.autoReleaseHold = onMessagePublished("shopify-orders-paid", async (event) => {
+  try {
+    const message = event.data.message;
+    // Safely check for the shop domain attribute
+    const shopDomain = message.attributes['X-Shopify-Shop-Domain'] || message.attributes['x-shopify-shop-domain'];
+    
+    if (!shopDomain) return;
+
+    const payloadStr = Buffer.from(message.data, 'base64').toString();
+    const payload = JSON.parse(payloadStr);
+    const orderId = payload.admin_graphql_api_id;
+
+    // 1. Verify this is a Group Buy order
+    const isGroupBuy = payload.note_attributes?.some(attr => attr.name === "_groupbuy_campaign_id");
+    if (!isGroupBuy) return;
+
+    console.log(`✅ Order ${orderId} was just paid! Releasing fulfillment hold...`);
+
+    // 2. Get the offline session to authenticate
+    const session = await prisma.session.findFirst({
+      where: { shop: shopDomain, isOnline: false }
+    });
+
+    if (!session) {
+      console.error(`❌ No offline session found for shop: ${shopDomain}`);
+      return;
+    }
+
+    // 3. Get the Fulfillment Orders attached to this purchase
+    const fulfillmentQuery = await shopifyGraphQL(shopDomain, session.accessToken,
+      `query getFulfillmentOrders($id: ID!) {
+        order(id: $id) {
+          fulfillmentOrders(first: 10) {
+            edges {
+              node {
+                id
+                status
+              }
+            }
+          }
+        }
+      }`,
+      { id: orderId }
+    );
+
+    const fulfillmentOrders = fulfillmentQuery.data?.order?.fulfillmentOrders?.edges || [];
+
+    // 4. Loop through and forcefully release any holds!
+    let releasedCount = 0;
+    for (const edge of fulfillmentOrders) {
+      if (edge.node.status === "ON_HOLD") {
+        await shopifyGraphQL(shopDomain, session.accessToken,
+          `mutation releaseHold($id: ID!) {
+            fulfillmentOrderReleaseHold(id: $id) {
+              fulfillmentOrder { status }
+              userErrors { message }
+            }
+          }`,
+          { id: edge.node.id }
+        );
+        releasedCount++;
+        console.log(`   🔓 Successfully released hold on FulfillmentOrder: ${edge.node.id}`);
+      }
+    }
+
+    if (releasedCount === 0) {
+       console.log(`   -> No holds needed releasing for order ${orderId}.`);
+    }
+
+  } catch (error) {
+    console.error("❌ Error auto-releasing hold:", error.message);
   }
 });
 
@@ -161,7 +239,7 @@ async function shopifyGraphQL(shop, accessToken, query, variables = {}) {
   return response.json();
 }
 
-// --- HELPER 1: Process Success ---
+// --- HELPER 1: Process Success (Applies Discount Only) ---
 async function processParticipants(participants, finalDiscountTier, shop, accessToken, campaign) {
   for (const participant of participants) {
     console.log(`   - Processing order ${participant.orderId}...`);
@@ -194,7 +272,6 @@ async function processParticipants(participants, finalDiscountTier, shop, access
       )?.node;
       
       if (lineItemToDiscount) {
-        // ✅ 2. Determine which discount to apply
         const isEligibleForLeaderDiscount = participant.isLeader && campaign.leaderDiscount && parseFloat(campaign.leaderDiscount) > 0;
         
         const discountPercentage = isEligibleForLeaderDiscount 
@@ -205,7 +282,6 @@ async function processParticipants(participants, finalDiscountTier, shop, access
           ? "Group Buy Leader Discount"
           : "Group Buy Discount";
 
-        // ✅ 3. Apply the calculated discount
         await shopifyGraphQL(shop, accessToken,
           `mutation orderEditAddLineItemDiscount($id: ID!, $lineItemId: ID!, $discount: OrderEditAppliedDiscountInput!) {
             orderEditAddLineItemDiscount(id: $id, lineItemId: $lineItemId, discount: $discount) {
@@ -227,45 +303,12 @@ async function processParticipants(participants, finalDiscountTier, shop, access
         }`,
         { id: calculatedOrderId }
       );
-
-      // 4. Find Authorization and Capture Payment
-      const orderJson = await shopifyGraphQL(shop, accessToken,
-        `query getOrderTransactions($id: ID!) {
-          order(id: $id) {
-            totalPriceSet { shopMoney { amount currencyCode } }
-            transactions(first: 5) { id kind status }
-          }
-        }`,
-        { id: participant.orderId }
-      );
       
-      const orderData = orderJson.data?.order;
-      const parentTransaction = orderData?.transactions?.find(txn => txn.kind === "AUTHORIZATION" && txn.status === "SUCCESS");
+      console.log(`     ✅ Successfully applied discount to order ${participant.orderId}. Shopify will auto-capture in 15 minutes.`);
 
-      if (parentTransaction) {
-        const finalPrice = parseFloat(orderData.totalPriceSet.shopMoney.amount);
-        const currency = orderData.totalPriceSet.shopMoney.currencyCode;
+      // 🚨 NOTICE: We completely removed the orderCapture logic here! 
+      // Shopify's native billing engine will now handle the vaulted capture automatically.
 
-        await shopifyGraphQL(shop, accessToken,
-          `mutation orderCapture($input: OrderCaptureInput!) {
-            orderCapture(input: $input) { 
-              transaction { id } 
-              userErrors { field message }
-            }
-          }`,
-          { 
-            input: { 
-              id: participant.orderId, 
-              parentTransactionId: parentTransaction.id, 
-              amount: finalPrice, 
-              currency: currency,
-            } 
-          }
-        );
-        console.log(`     ✅ Captured ${finalPrice.toFixed(2)} ${currency} for order ${participant.orderId}`);
-      } else {
-        console.log(`     -> No authorized payment found to capture for order ${participant.orderId}`);
-      }
     } catch (error) {
       console.error(`     ❌ Error processing order ${participant.orderId}:`, error.message);
     }
@@ -395,6 +438,32 @@ exports.campaignFinalizer = onSchedule("every 5 minutes", async (event) => {
         where: { id: campaign.id },
         data: { status: finalStatus },
       });
+
+      // --- 🧹 NEW: REMOVE THE SELLING PLAN FROM SHOPIFY ---
+      if (campaign.sellingPlanGroupId) {
+        console.log(`   🧹 Removing Selling Plan from Shopify product page...`);
+        try {
+          const deletePlanJson = await shopifyGraphQL(campaign.shop, session.accessToken,
+            `mutation sellingPlanGroupDelete($id: ID!) {
+              sellingPlanGroupDelete(id: $id) {
+                deletedSellingPlanGroupId
+                userErrors { field message }
+              }
+            }`,
+            { id: campaign.sellingPlanGroupId }
+          );
+          
+          const errors = deletePlanJson.data?.sellingPlanGroupDelete?.userErrors || [];
+          if (errors.length > 0) {
+            console.error(`   ❌ Shopify Error removing plan:`, errors);
+          } else {
+            console.log(`   ✅ Selling Plan removed successfully. Product page restored.`);
+          }
+        } catch (error) {
+          console.error(`   ❌ Failed to remove Selling Plan:`, error.message);
+        }
+      }
+
       console.log(`--- ✅ Campaign ${campaign.id} finalized with status: ${finalStatus} ---\n`);
     }
 
