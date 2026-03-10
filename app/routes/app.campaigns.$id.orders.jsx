@@ -50,6 +50,7 @@ export const loader = async ({ request, params }) => {
           ... on ProductVariant {
             id
             title
+            price
           }
         }
       }`, { variables: { ids: allCampaignVariantGIDs } }
@@ -57,7 +58,8 @@ export const loader = async ({ request, params }) => {
     const { data } = await variantQueryRes.json();
     allCampaignVariants = data.nodes.filter(Boolean).map(v => ({
       id: v.id.split('/').pop(), 
-      title: v.title
+      title: v.title,
+      price: v.price
     }));
   }
 
@@ -67,9 +69,9 @@ export const loader = async ({ request, params }) => {
   
   const fullVariantId = selectedVariantId ? `gid://shopify/ProductVariant/${selectedVariantId}` : null;
 
-  // --- 2. Get the Correct List of Participants ---
   let participantQuery = {
     group: { campaignId: campaign.id },
+    // Notice: We intentionally do NOT filter by status here so we get the Audit Trail
   };
 
   if (campaign.scope === 'VARIANT' && fullVariantId) {
@@ -83,7 +85,8 @@ export const loader = async ({ request, params }) => {
       isLeader: true, 
       customerId: true, 
       quantity: true, 
-      productVariantId: true 
+      productVariantId: true,
+      status: true // ✅ NEW: Grab the database status
     },
   });
 
@@ -142,15 +145,19 @@ export const loader = async ({ request, params }) => {
         fulfillmentStatus: order ? order.displayFulfillmentStatus : 'UNFULFILLED',
         isLeader: p.isLeader,
         quantity: p.quantity,
+        dbStatus: p.status, // ✅ NEW: Pass the DB status to the UI
         variantTitle: variant 
           ? (variant.title === 'Default Title' ? 'N/A' : variant.title) 
           : (p.productVariantId ? 'Variant not found' : 'N/A')
       };
     });
 
+    // ✅ NEW: The exact math fix! Only count ACTIVE orders for the progress bar
+    const activeParticipants = participants.filter(p => p.status === 'ACTIVE');
+    
     participantData = {
-      count: new Set(participants.map(p => p.customerId)).size,
-      quantity: participants.reduce((sum, p) => sum + p.quantity, 0)
+      count: new Set(activeParticipants.map(p => p.customerId)).size,
+      quantity: activeParticipants.reduce((sum, p) => sum + p.quantity, 0)
     };
   }
 
@@ -199,8 +206,39 @@ export default function CampaignOrdersPage() {
       default: return 'default';
     }
   };
+
+  // --- CAMPAIGN STATUS LOGIC ---
+  const getDisplayStatus = (campaign) => {
+    if (campaign.status === 'SUCCESSFUL' || campaign.status === 'FAILED') {
+      return campaign.status.charAt(0).toUpperCase() + campaign.status.slice(1).toLowerCase();
+    }
+    const now = new Date();
+    const startTime = new Date(campaign.startDateTime);
+    const endTime = new Date(campaign.endDateTime);
+
+    if (now < startTime) return 'Scheduled';
+    if (now >= startTime && now < endTime) {
+      if (campaign.status === 'PROCESSING') return 'Processing';
+      return 'Active';
+    }
+    if (now >= endTime) return 'Processing';
+    return 'Unknown';
+  };
+
+  const getStatusBadgeTone = (status) => {
+    switch (status) {
+      case 'Active': return 'info';
+      case 'Processing': return 'warning';
+      case 'Successful': return 'success';
+      case 'Failed': return 'critical';
+      case 'Scheduled': return 'attention';
+      default: return 'default';
+    }
+  };
+
+  const displayStatus = getDisplayStatus(campaign);
   
-  // --- ✅ NEW: MULTI-SEGMENT PROGRESS BAR LOGIC ---
+  // --- ✅ NEW: TIER-STAGE PROGRESS BAR LOGIC ---
   const fakeCount = campaign.startingParticipants || 0;
   const realCount = campaign.countingMethod === 'ITEM_QUANTITY' 
     ? participantData.quantity 
@@ -214,74 +252,99 @@ export default function CampaignOrdersPage() {
   const tiers = JSON.parse(campaign.tiersJson || '[]');
   const sortedTiers = [...tiers].sort((a, b) => Number(a.quantity) - Number(b.quantity));
 
-  let goalQuantity = 0;
+  let maxGoal = 0;
   let fakePercent = 0;
   let realPercent = 0;
-  let progressText = `${totalProgress}`;
   let finalDiscountTier = null;
 
   if (sortedTiers.length > 0) {
+    // 1. Set the absolute highest tier as the 100% mark of the visual bar
     const finalGoalTier = sortedTiers[sortedTiers.length - 1];
-    const nextGoalTier = sortedTiers.find(tier => totalProgress < Number(tier.quantity));
+    maxGoal = Number(finalGoalTier.quantity);
     
-    goalQuantity = nextGoalTier ? Number(nextGoalTier.quantity) : Number(finalGoalTier.quantity);
-    
-    if (goalQuantity > 0) {
-      // Calculate fake bar width
-      fakePercent = Math.min((fakeCount / goalQuantity) * 100, 100);
-      // Calculate real bar width (capped so it never breaks out of the 100% container)
-      realPercent = Math.min((realCount / goalQuantity) * 100, 100 - fakePercent);
+    if (maxGoal > 0) {
+      // 2. Cap the visual fill at 100% so it doesn't break out of the UI if they over-sell
+      const cappedReal = Math.min(realCount, maxGoal);
+      const cappedFake = Math.min(fakeCount, maxGoal - cappedReal);
+      
+      realPercent = (cappedReal / maxGoal) * 100;
+      fakePercent = (cappedFake / maxGoal) * 100;
     }
-    progressText = `${totalProgress} / ${goalQuantity}`;
     
+    // 3. Find out what tier they have officially unlocked
     const achievedTiers = [...tiers].sort((a, b) => Number(b.quantity) - Number(a.quantity));
     finalDiscountTier = achievedTiers.find(tier => totalProgress >= Number(tier.quantity));
   }
   
+  const progressText = `${totalProgress} / ${maxGoal > 0 ? maxGoal : '∞'}`;
   const scopeLabel = campaign.scope === 'PRODUCT' ? 'Product-wide' : 'Per-Variant';
   const countingLabel = campaign.countingMethod === 'ITEM_QUANTITY' ? 'By Item Quantity' : 'By Participants';
-  // --- END MULTI-SEGMENT LOGIC ---
+  // --- END TIER-STAGE LOGIC ---
 
   const rowMarkup = rows.map((row, index) => {
+    // ✅ Check if the order is dead in our DB OR voided in Shopify
+    const isCancelled = row.dbStatus === 'CANCELLED' || ['VOIDED', 'REFUNDED', 'PARTIALLY_REFUNDED'].includes(row.paymentStatus);
+    const rowStyle = isCancelled ? { opacity: 0.5, backgroundColor: 'var(--p-color-bg-surface-secondary)' } : {};
+
     return (
       <IndexTable.Row id={`${row.orderId}-${index}`} key={`${row.orderId}-${index}`} position={index}>
         <IndexTable.Cell>
-          <Link
-            url={`shopify://admin/orders/${row.orderShopifyId}`}
-            target="_top"
-            removeUnderline
-          >
-            <Text variant="bodyMd" fontWeight="bold" as="span">
-              {row.orderName}
-            </Text>
-          </Link>
+          <div style={rowStyle}>
+            <Link
+              url={`shopify://admin/orders/${row.orderShopifyId}`}
+              target="_top"
+              removeUnderline
+            >
+              <Text variant="bodyMd" fontWeight={isCancelled ? "regular" : "bold"} as="span" tone={isCancelled ? "subdued" : "base"}>
+                {row.orderName}
+              </Text>
+            </Link>
+          </div>
+        </IndexTable.Cell>
+        <IndexTable.Cell><div style={rowStyle}>{new Date(row.createdAt).toLocaleDateString()}</div></IndexTable.Cell>
+        <IndexTable.Cell><div style={rowStyle}>{row.customerName}</div></IndexTable.Cell>
+        <IndexTable.Cell>
+          <div style={rowStyle}>
+            <Text as="span" fontWeight={isCancelled ? "regular" : "semibold"} tone={isCancelled ? "subdued" : "base"}>{row.variantTitle}</Text>
+          </div>
+        </IndexTable.Cell>
+        <IndexTable.Cell><div style={rowStyle}>{row.quantity}</div></IndexTable.Cell>
+        <IndexTable.Cell>
+          <div style={rowStyle}>
+            {/* ✅ Override role with a "Canceled" badge if the order is dead */}
+            {isCancelled ? (
+               <Badge tone="critical">Canceled</Badge>
+            ) : row.isLeader ? (
+              <BlockStack gap="100">
+                <Badge tone="success" icon={StarFilledIcon}>Leader</Badge>
+                {campaign.leaderDiscount > 0 && (
+                   <Text variant="bodySm" tone="subdued">{campaign.leaderDiscount}% off</Text>
+                )}
+              </BlockStack>
+            ) : (
+              <Text variant="bodySm" tone="subdued">Member</Text>
+            )}
+          </div>
         </IndexTable.Cell>
         <IndexTable.Cell>
-          {new Date(row.createdAt).toLocaleDateString()}
-        </IndexTable.Cell>
-        <IndexTable.Cell>{row.customerName}</IndexTable.Cell>
-        <IndexTable.Cell>
-          <Text as="span" fontWeight="semibold">{row.variantTitle}</Text>
-        </IndexTable.Cell>
-        <IndexTable.Cell>{row.quantity}</IndexTable.Cell>
-        <IndexTable.Cell>
-          {row.isLeader && (
-            <Badge tone="success" icon={StarFilledIcon}>Leader</Badge>
-          )}
+          <div style={rowStyle}>
+            <Badge tone={getBadgeTone(row.paymentStatus)}>
+              {row.paymentStatus.replace('_', ' ')}
+            </Badge>
+          </div>
         </IndexTable.Cell>
         <IndexTable.Cell>
-          <Badge tone={getBadgeTone(row.paymentStatus)}>
-            {row.paymentStatus.replace('_', ' ')}
-          </Badge>
-        </IndexTable.Cell>
-        <IndexTable.Cell>
-          <Badge tone={getFulfillmentBadgeTone(row.fulfillmentStatus)}>
-            {row.fulfillmentStatus.replace('_', ' ')}
-          </Badge>
+          <div style={rowStyle}>
+            <Badge tone={getFulfillmentBadgeTone(row.fulfillmentStatus)}>
+              {row.fulfillmentStatus.replace('_', ' ')}
+            </Badge>
+          </div>
         </IndexTable.Cell>
       </IndexTable.Row>
     );
   });
+
+  const activeVariant = allCampaignVariants.find(v => v.id === selectedVariantId) || allCampaignVariants[0];
 
   return (
     <Page
@@ -301,9 +364,17 @@ export default function CampaignOrdersPage() {
                     alt={campaign.productTitle} 
                     size="large"
                   />
-                  <Text as="span" variant="bodyLg" fontWeight="bold">
-                    {campaign.productTitle}
-                  </Text>
+                  {/* ✅ NEW: Stacked the title and price together */}
+                  <BlockStack gap="100">
+                    <Text as="span" variant="bodyLg" fontWeight="bold">
+                      {campaign.productTitle}
+                    </Text>
+                    {activeVariant?.price && (
+                      <Text as="span" variant="bodyMd" tone="subdued">
+                        Retail Price: {activeVariant.price}
+                      </Text>
+                    )}
+                  </BlockStack>
                 </InlineStack>
               </Box>
               
@@ -325,7 +396,13 @@ export default function CampaignOrdersPage() {
         <Layout.Section variant="twoThirds">
           <Card>
             <BlockStack gap="400">
-              <Text as="h2" variant="headingMd">Campaign Progress</Text>
+              {/* ✅ THE NEW HEADER WITH BADGE */}
+              <InlineStack align="space-between" blockAlign="center">
+                <Text as="h2" variant="headingMd">Campaign Progress</Text>
+                <Badge tone={getStatusBadgeTone(displayStatus)} size="medium">
+                  {displayStatus}
+                </Badge>
+              </InlineStack>
               
               <Box paddingBlockEnd="400">
                 <BlockStack gap="200">
@@ -338,28 +415,72 @@ export default function CampaignOrdersPage() {
                     </Text>
                   </InlineStack>
                   
-                  {/* ✅ NEW: Custom Multi-Color Stacked Progress Bar */}
-                  <div style={{ 
-                    width: '100%', 
-                    height: '8px', 
-                    backgroundColor: 'var(--p-color-bg-surface-secondary-active, #e3e3e3)', 
-                    borderRadius: '4px', 
-                    display: 'flex', 
-                    overflow: 'hidden' 
-                  }}>
-                    {/* Fake Count Segment (Lighter info color) */}
-                    <div 
-                      style={{ width: `${fakePercent}%`, backgroundColor: 'var(--p-color-bg-surface-info, #91c0ff)', transition: 'width 0.3s ease' }} 
-                      title={`Boosted Participants: ${fakeCount}`}
-                    />
-                    {/* Real Count Segment (Primary info color) */}
-                    <div 
-                      style={{ width: `${realPercent}%`, backgroundColor: 'var(--p-color-bg-fill-info, #005bd3)', transition: 'width 0.3s ease' }} 
-                      title={`Real Orders: ${realCount}`}
-                    />
+                  {/* ✅ NEW: Seamless Segmented Bar (8px Height + Perfect Gaps) */}
+                  <div style={{ display: 'flex', width: '100%', marginTop: '10px', marginBottom: '12px' }}>
+                    
+                    {maxGoal > 0 && sortedTiers.map((tier, index) => {
+                      const previousTierQty = index === 0 ? 0 : Number(sortedTiers[index - 1].quantity);
+                      const tierGoal = Number(tier.quantity);
+                      const tierCapacity = tierGoal - previousTierQty;
+
+                      const totalInThisBlock = Math.max(0, Math.min(totalProgress - previousTierQty, tierCapacity));
+                      const realInThisBlock = Math.max(0, Math.min(realCount - previousTierQty, tierCapacity));
+                      const fakeInThisBlock = totalInThisBlock - realInThisBlock;
+
+                      const realPercent = (realInThisBlock / tierCapacity) * 100;
+                      const fakePercent = (fakeInThisBlock / tierCapacity) * 100;
+                      const isAchieved = totalProgress >= tierGoal;
+
+                      const isFirst = index === 0;
+                      const isLast = index === sortedTiers.length - 1;
+
+                      return (
+                        <div key={index} style={{ 
+                          flex: tierCapacity, 
+                          display: 'flex', 
+                          flexDirection: 'column',
+                          // ✅ THE GAP FIX: Use a solid 2px white border on the right side of every block (except the last one)
+                          borderRight: isLast ? 'none' : '2px solid white' 
+                        }}>
+                          
+                          {/* The Segment */}
+                          <div style={{ 
+                            width: '100%', 
+                            height: '8px', // ✅ THE HEIGHT FIX: Back to the original 8px!
+                            backgroundColor: 'var(--p-color-bg-surface-secondary-active, #e3e3e3)', 
+                            borderTopLeftRadius: isFirst ? '4px' : '0', // Adjusted to match 8px height
+                            borderBottomLeftRadius: isFirst ? '4px' : '0',
+                            borderTopRightRadius: isLast ? '4px' : '0',
+                            borderBottomRightRadius: isLast ? '4px' : '0',
+                            display: 'flex', 
+                            overflow: 'hidden' 
+                          }}>
+                            {/* Real Count Fill */}
+                            <div style={{ width: `${realPercent}%`, backgroundColor: 'var(--p-color-bg-fill-info, #005bd3)', transition: 'width 0.3s ease' }} />
+                            {/* Fake Count Fill */}
+                            <div style={{ width: `${fakePercent}%`, backgroundColor: 'var(--p-color-bg-surface-info, #91c0ff)', transition: 'width 0.3s ease' }} />
+                          </div>
+
+                          {/* The Label */}
+                          <div style={{ marginTop: '8px', textAlign: 'center' }}>
+                            <span style={{ 
+                              display: 'block',
+                              fontSize: '12px', 
+                              lineHeight: '16px',
+                              fontWeight: 'bold', 
+                              color: isAchieved ? '#2ecc71' : 'var(--p-color-text-subdued, #8a8a8a)'
+                            }}>
+                              {tier.discount}% off
+                            </span>
+                            <Text variant="bodyXs" tone="subdued">{tier.quantity}</Text>
+                          </div>
+                          
+                        </div>
+                      );
+                    })}
                   </div>
                   
-                  {/* ✅ NEW: Mini Legend */}
+                  {/* Mini Legend */}
                   <InlineStack gap="300">
                     <InlineStack gap="100" blockAlign="center">
                       <div style={{ width: '8px', height: '8px', borderRadius: '2px', backgroundColor: 'var(--p-color-bg-fill-info, #005bd3)' }} />

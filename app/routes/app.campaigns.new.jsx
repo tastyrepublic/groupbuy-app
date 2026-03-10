@@ -58,25 +58,90 @@ export const action = async ({ request }) => {
   }
 
   try {
-    // 1. Publish to Sales Channel (Keep this part)
-    const appPublicationQuery = `query { currentAppInstallation { publication { id } } }`;
-    const pubResponse = await admin.graphql(appPublicationQuery);
-    const { data: pubData } = await pubResponse.json();
-    const appPublicationId = pubData.currentAppInstallation.publication.id;
-
-    const publishMutation = `
-      mutation publishablePublish($productId: ID!, $publicationId: ID!) {
-        publishablePublish(id: $productId, input: [{ publicationId: $publicationId }]) {
-          publishable { ... on Product { id } }
-          userErrors { field message }
+    // ✅ FIX 1: Add $resources to the mutation definition
+    const sellingPlanMutation = `
+      mutation sellingPlanGroupCreate($input: SellingPlanGroupInput!, $resources: SellingPlanGroupResourceInput) {
+        sellingPlanGroupCreate(input: $input, resources: $resources) {
+          sellingPlanGroup {
+            id
+            sellingPlans(first: 1) {
+              edges {
+                node {
+                  id
+                }
+              }
+            }
+          }
+          userErrors {
+            field
+            message
+          }
         }
-      }`;
-    
-    await admin.graphql(publishMutation, {
-      variables: { "productId": productId, "publicationId": appPublicationId }
-    });
+      }
+    `;
 
-    // 2. Create the campaign (Keep this part)
+    const sellingPlanInput = {
+      name: "Group Buy Special Offer", 
+      merchantCode: `GB-${Date.now()}`,
+      options: ["Discount Tier"], // This is the label for the individual option
+      position: 1,
+      sellingPlansToCreate: [
+        {
+          name: "Join Group Buy (Pay $0 Today)", // This is the label for the radio button itself
+          options: ["Join Group Buy"],
+          position: 1,
+          // ✅ FIX 1: Explicitly declare this as a Pre-Order
+          category: "PRE_ORDER", 
+          billingPolicy: {
+            fixed: { 
+              checkoutCharge: { type: "PERCENTAGE", value: { percentage: 0 } },
+              // ✅ FIX 2: Define when the vaulted card should be charged
+              remainingBalanceChargeTrigger: "EXACT_TIME",
+              remainingBalanceChargeExactTime: endDateTimeUtc.toISOString()
+            } 
+          },
+          deliveryPolicy: {
+            fixed: { 
+              // ✅ FIX 3: Define when the item will be fulfilled
+              fulfillmentTrigger: "EXACT_TIME",
+              fulfillmentExactTime: endDateTimeUtc.toISOString() 
+            } 
+          },
+          pricingPolicies: [
+            {
+              fixed: { adjustmentType: "PERCENTAGE", adjustmentValue: { percentage: 0 } } 
+            }
+          ]
+        }
+      ]
+    };
+
+    // ✅ FIX 2: Separate the resources from the input object
+    const sellingPlanResources = {
+      productIds: [productId],
+      productVariantIds: selectedVariantIds
+    };
+
+    // ✅ FIX 3: Pass both input AND resources into the variables
+    const spResponse = await admin.graphql(sellingPlanMutation, { 
+      variables: { 
+        input: sellingPlanInput,
+        resources: sellingPlanResources
+      } 
+    });
+    
+    const spData = await spResponse.json();
+    
+    if (spData.data?.sellingPlanGroupCreate?.userErrors?.length > 0) {
+      console.error("Selling Plan Errors:", spData.data.sellingPlanGroupCreate.userErrors);
+      throw new Error("Failed to create Shopify Selling Plan");
+    }
+
+    // ✅ CAPTURE BOTH IDs
+    const generatedSellingPlanGroupId = spData.data.sellingPlanGroupCreate.sellingPlanGroup.id;
+    const generatedSellingPlanId = spData.data.sellingPlanGroupCreate.sellingPlanGroup.sellingPlans.edges[0].node.id;
+
+    // ✅ SAVE BOTH TO NEONDB
     const newCampaign = await db.campaign.create({
       data: {
         shop: session.shop,
@@ -93,10 +158,10 @@ export const action = async ({ request }) => {
         startingParticipants: parseInt(formData.get("startingParticipants"), 10) || 0,
         scope: formData.get("scope"),
         countingMethod: formData.get("countingMethod"),
+        sellingPlanId: generatedSellingPlanId, 
+        sellingPlanGroupId: generatedSellingPlanGroupId 
       },
     });
-
-    // ✅ THE FIX: The crashing line was removed from here.
 
     return redirect(`/app/campaigns/${newCampaign.id}?success=true`);
 

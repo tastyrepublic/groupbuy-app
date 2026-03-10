@@ -52,6 +52,8 @@ model Campaign {
 // --- NEW FIELDS ---
   startingParticipants Int    @default(0) // For the marketing boost
   schedulerJobName     String?  // To track the Google Cloud Scheduler job
+  sellingPlanId       String?
+  sellingPlanGroupId  String?
 
 // A Campaign can have many Groups
   groups             Group[]
@@ -75,9 +77,13 @@ model Participant {
   customerId String // The Shopify customer GID
   isLeader   Boolean  @default(false)
   createdAt  DateTime @default(now())
+  orderCreatedAt   DateTime?
   updatedAt  DateTime @updatedAt
   quantity   Int      @default(1)
   productVariantId String?
   groupId    Int
   group      Group @relation(fields: [groupId], references: [id])
+  status     String   @default("ACTIVE")
+
+  @@unique([orderId, productVariantId])
 }

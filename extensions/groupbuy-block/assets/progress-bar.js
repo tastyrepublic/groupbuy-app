@@ -111,6 +111,58 @@ function updateProgressUI(container, campaignData, newProgress) {
   });
 }
 
+// ✅ THE NUCLEAR OPTION: Target the custom Web Component directly
+const handleNativeSellingPlanUI = () => {
+  // 1. Inject Bulletproof CSS into the page header
+  if (!document.getElementById('gb-hide-selling-plans-css')) {
+    const style = document.createElement('style');
+    style.id = 'gb-hide-selling-plans-css';
+    style.innerHTML = `
+      /* Target standard Shopify wrappers */
+      .shopify-selling-plan-group,
+      shopify-payment-terms,
+      .product-form__input--selling-plan {
+        display: none !important;
+      }
+      /* ✅ TARGET THE CUSTOM WEB COMPONENT FROM YOUR THEME */
+      product-subscriptions {
+        display: none !important;
+      }
+      /* Fallback for other weird structures */
+      fieldset:has(input[name="selling_plan"]),
+      div:has(> input[name="selling_plan"]) {
+        display: none !important;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  const disableInputs = () => {
+    // 2. Disable the native inputs AND the custom radio buttons
+    // so the normal "Add to Cart" safely defaults to 1-time purchase
+    const inputs = document.querySelectorAll('input[name="selling_plan"], select[name="selling_plan"], input[name="purchase_option"]');
+    inputs.forEach(input => {
+      input.disabled = true;
+    });
+  };
+
+  // Run immediately and watch for theme changes
+  disableInputs();
+  const observer = new MutationObserver(() => disableInputs());
+  observer.observe(document.body, { childList: true, subtree: true });
+
+  // 3. THE BUG FIX: Intercept standard Add to Cart forms
+  const productForms = document.querySelectorAll('form[action*="/cart/add"]');
+  productForms.forEach(form => {
+    form.addEventListener('submit', () => {
+      const hiddenSpInput = form.querySelector('input[name="selling_plan"]');
+      if (hiddenSpInput && !hiddenSpInput.value) {
+        hiddenSpInput.disabled = true; // Prevents the empty string crash!
+      }
+    });
+  });
+};
+
 /**
  * Fetches campaign data for a specific variant and renders the correct widget.
  */
@@ -143,6 +195,9 @@ function fetchAndRenderCampaign(container, variantId) {
           container.dataset.campaignId = data.campaign.id;
           container.dataset.scope = data.campaign.scope || 'PRODUCT';
           container.dataset.validVariants = data.campaign.selectedVariantIdsJson || '[]';
+          container.dataset.sellingPlanId = data.campaign.sellingPlanId || '';
+
+          handleNativeSellingPlanUI();
 
           if (data.campaign.status === 'ACTIVE') {
             renderActiveCampaign(container, data);
@@ -274,7 +329,7 @@ function renderActiveCampaign(container, data) {
 function renderScheduledCampaign(container, campaign) {
   container.innerHTML = `
     <div class="gb-scheduled-container">
-      <h3>🔥 A Group Buy is starting soon!</h3>
+      <h3>🔥 A Group Buy is starting soon!test</h3>
       <p>Starts in: <span class="gb-countdown-timer"></span></p>
       <button class="gb-notify-button" title="Get Notified">
         <svg viewBox="0 0 20 20" class="gb-notify-icon" focusable="false" aria-hidden="true">
@@ -359,44 +414,56 @@ function initializeJoinButton(container) {
 
   const setupButton = (text) => {
     const newJoinButton = joinButton.cloneNode(true);
-    newJoinButton.textContent = text; // Set the text
+    newJoinButton.textContent = text;
     joinButton.parentNode.replaceChild(newJoinButton, joinButton);
 
     newJoinButton.addEventListener('click', () => {
-      newJoinButton.textContent = 'Creating Checkout...';
+      newJoinButton.textContent = 'Adding to Cart...';
       newJoinButton.disabled = true;
       const quantityInput = container.querySelector('#gb-quantity');
       const quantity = quantityInput ? parseInt(quantityInput.value, 10) : 1;
-      const currentVariantId = container.dataset.variantId; 
+      
+      // Get the simple numeric variant ID required by Shopify's Cart API
+      const currentVariantId = container.dataset.variantId.split('/').pop(); 
+      // Get the Selling Plan ID that we fetched from the campaign data
+      const sellingPlanId = container.dataset.sellingPlanId; 
 
-      fetch('/apps/gbs/join', {
+      if (!sellingPlanId) {
+        newJoinButton.textContent = 'Error: No Selling Plan Found';
+        newJoinButton.disabled = false;
+        return;
+      }
+
+      // 🛒 NATIVE SHOPIFY CART AJAX ADD
+      let formData = {
+        'items': [{
+          'id': currentVariantId,
+          'quantity': quantity,
+          'selling_plan': sellingPlanId.split('/').pop(), // Shopify Ajax requires numeric ID
+          'properties': {
+            '_groupbuy_campaign_id': container.dataset.campaignId
+          }
+        }]
+      };
+
+      fetch(window.Shopify.routes.root + 'cart/add.js', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-            variantId: currentVariantId, 
-            shop, 
-            productId, 
-            quantity, 
-            customerId,
-            groupBuyFilterEnabled: true 
-        }), 
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(formData)
       })
       .then(response => {
-        if (!response.ok) {
-          return response.json().then(err => { throw new Error(err.error || 'API Error') });
-        }
+        if (!response.ok) throw new Error('Could not add to cart');
         return response.json();
       })
-      .then(data => {
-        if (data.checkoutUrl) {
-          window.location.href = data.checkoutUrl;
-        } else {
-          throw new Error('Checkout URL not found.');
-        }
+      .then(() => {
+        // Redirect directly to the native Shopify checkout or cart!
+        window.location.href = '/checkout';
       })
       .catch(error => {
-        console.error("Group Buy Error:", error.message);
-        newJoinButton.textContent = error.message; 
+        console.error("Cart Error:", error);
+        newJoinButton.textContent = 'Error Adding to Cart'; 
         newJoinButton.disabled = false;
       });
     });

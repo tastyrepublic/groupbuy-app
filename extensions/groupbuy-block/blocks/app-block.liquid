@@ -5,6 +5,22 @@
 
 <script type="module" src="{{ 'progress-bar.js' | asset_url }}" defer="defer"></script>
 
+<style>
+  /* 🛑 INSTANTLY HIDE SELLING PLANS ON INITIAL PAGE LOAD */
+  .shopify-selling-plan-group,
+  shopify-payment-terms,
+  .product-form__input--selling-plan,
+  product-subscriptions {
+    display: none !important;
+  }
+  
+  /* Fallback for other custom structures */
+  fieldset:has(input[name="selling_plan"]),
+  div:has(> input[name="selling_plan"]) {
+    display: none !important;
+  }
+</style>
+
 <div class="gb-widget" 
   data-product-id="{{ product.id }}"
   data-variant-id="{{ product.selected_or_first_available_variant.id }}"

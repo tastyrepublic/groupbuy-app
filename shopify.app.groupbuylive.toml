@@ -1,16 +1,12 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
-client_id = "3c6ebbadf8d232f4e854913cc9af9362"
-name = "groupbuy-app"
-application_url = "https://communications-journal-baptist-tan.trycloudflare.com"
+client_id = "64f33a0c73521f54219f6883774470fa"
+name = "Group buy live store test"
+application_url = "https://electrical-layers-admitted-offered.trycloudflare.com"
 embedded = true
-handle = "groupbuy-app-2"
-
-[build]
-automatically_update_urls_on_dev = true
 
 [webhooks]
-api_version = "2025-07"
+api_version = "2026-01"
 
   [[webhooks.subscriptions]]
   topics = [ "app/scopes_update" ]
@@ -21,23 +17,29 @@ api_version = "2025-07"
   uri = "pubsub://groupbuy-app-635bf:shopify-orders-create"
 
   [[webhooks.subscriptions]]
+  topics = [ "orders/cancelled" ]
+  uri = "pubsub://groupbuy-app-635bf:shopify-orders-cancelled"
+
+  [[webhooks.subscriptions]]
   topics = [ "app/uninstalled" ]
   uri = "/webhooks/app/uninstalled"
 
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
 scopes = "read_checkouts,read_customers,read_orders,read_payment_customizations,read_publications,unauthenticated_read_checkouts,unauthenticated_read_product_listings,unauthenticated_write_checkouts,write_app_proxy,write_checkouts,write_order_edits,write_orders,write_payment_customizations,write_products,write_publications"
+optional_scopes = [ ]
+use_legacy_install_flow = false
 
 [auth]
 redirect_urls = [
-  "https://communications-journal-baptist-tan.trycloudflare.com/auth/shopify/callback",
-  "https://communications-journal-baptist-tan.trycloudflare.com/api/auth/callback"
+  "https://electrical-layers-admitted-offered.trycloudflare.com/auth/shopify/callback",
+  "https://electrical-layers-admitted-offered.trycloudflare.com/api/auth/callback"
 ]
 
 [app_proxy]
-url = "https://communications-journal-baptist-tan.trycloudflare.com/api"
+url = "https://electrical-layers-admitted-offered.trycloudflare.com/api"
 subpath = "gbs"
 prefix = "apps"
 
-[pos]
-embedded = false
+[build]
+automatically_update_urls_on_dev = true

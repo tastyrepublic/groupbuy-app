@@ -97,7 +97,8 @@ export const loader = async ({ request, params }) => {
 
 // ✅ Corrected and improved action function
 export const action = async ({ request, params }) => {
-  const { session } = await authenticate.admin(request);
+  // ✅ 1. ADDED 'admin' here so we can run GraphQL!
+  const { session, admin } = await authenticate.admin(request);
   const formData = await request.formData();
   const campaignId = parseInt(params.id, 10);
 
@@ -109,18 +110,14 @@ export const action = async ({ request, params }) => {
   const hasParticipants = participantCount > 0;
   const errors = { tiers: [], schedule: {}, leaderDiscount: null };
 
-  // --- Start building the object of data to update ---
   const dataToUpdate = {};
 
-  // --- Get and validate all data from the form ---
-
-  // --- NEW: Handle the array of selected variants ---
+  // --- Handle the array of selected variants ---
   const selectedVariantIdsJson = formData.get("selectedVariantIdsJson");
   if (selectedVariantIdsJson) {
     const selectedVariantIds = JSON.parse(selectedVariantIdsJson);
     if (selectedVariantIds.length > 0) {
       dataToUpdate.selectedVariantIdsJson = selectedVariantIdsJson;
-      // Also update parent product info in case it was changed
       dataToUpdate.productId = formData.get("productId");
       dataToUpdate.productTitle = formData.get("productTitle");
       dataToUpdate.productImage = formData.get("productImage");
@@ -143,28 +140,93 @@ export const action = async ({ request, params }) => {
     dataToUpdate.countingMethod = formData.get("countingMethod");
   }
 
-  if (!isStarted) {
-    const campaignTimezone = formData.get("timezone");
-    const startDateTimeUtc = toDate(formData.get("startDate"), { timeZone: campaignTimezone });
-    const endDateTimeUtc = toDate(formData.get("endDate"), { timeZone: campaignTimezone });
-    if (startDateTimeUtc.getTime() < new Date().getTime() - 60000) { errors.schedule.startDate = 'Cannot be in the past.'; }
-    if (startDateTimeUtc >= endDateTimeUtc) { errors.schedule.endDate = 'Must be after start date.'; }
-
-    dataToUpdate.startDateTime = startDateTimeUtc;
-    dataToUpdate.endDateTime = endDateTimeUtc;
-    dataToUpdate.startingParticipants = parseInt(formData.get("startingParticipants"), 10);
-
-    // --- Update Google Cloud Scheduler ---
-    // (This logic is moved inside the main try/catch block for better error handling)
+  // 1. Keep Start Date protected (cannot change once started)
+if (!isStarted) {
+  const campaignTimezone = formData.get("timezone");
+  const startDateTimeUtc = toDate(formData.get("startDate"), { timeZone: campaignTimezone });
+  if (startDateTimeUtc.getTime() < new Date().getTime() - 60000) { 
+    errors.schedule.startDate = 'Cannot be in the past.'; 
   }
+  dataToUpdate.startDateTime = startDateTimeUtc;
+  dataToUpdate.startingParticipants = parseInt(formData.get("startingParticipants"), 10);
+}
 
-  // --- Final validation check before proceeding ---
+// 2. MOVE End Date logic out here so it can always be edited
+const campaignTimezone = formData.get("timezone");
+const endDateTimeUtc = toDate(formData.get("endDate"), { timeZone: campaignTimezone });
+const currentStart = dataToUpdate.startDateTime || campaign.startDateTime;
+
+if (currentStart >= endDateTimeUtc) { 
+  errors.schedule.endDate = 'Must be after start date.'; 
+} else {
+  dataToUpdate.endDateTime = endDateTimeUtc;
+  dataToUpdate.timezone = campaignTimezone; // Update timezone as well
+}
+
   if (errors.product || errors.leaderDiscount || errors.tiers.some(e => e) || Object.keys(errors.schedule).length > 0) {
     return json({ errors }, { status: 422 });
   }
 
   try {
-    // --- Perform a single database update at the end ---
+    // 🔄 2. IF VARIANTS OR DATES CHANGED, REBUILD THE SELLING PLAN
+    // 🔄 IF VARIANTS OR DATES CHANGED, REBUILD THE SELLING PLAN
+    if (dataToUpdate.selectedVariantIdsJson || dataToUpdate.endDateTime) {
+      
+      // ✅ 1. Instantly delete the old group using our saved Group ID!
+      if (campaign.sellingPlanGroupId) {
+        await admin.graphql(`
+          mutation { sellingPlanGroupDelete(id: "${campaign.sellingPlanGroupId}") { deletedSellingPlanGroupId } }
+        `);
+      }
+
+      const newEndDateUtc = dataToUpdate.endDateTime || campaign.endDateTime;
+      const newVariants = dataToUpdate.selectedVariantIdsJson 
+        ? JSON.parse(dataToUpdate.selectedVariantIdsJson) 
+        : JSON.parse(campaign.selectedVariantIdsJson);
+      const productId = dataToUpdate.productId || campaign.productId;
+      const title = dataToUpdate.productTitle || campaign.productTitle;
+
+      const spMutation = `
+        mutation sellingPlanGroupCreate($input: SellingPlanGroupInput!, $resources: SellingPlanGroupResourceInput) {
+          sellingPlanGroupCreate(input: $input, resources: $resources) {
+            sellingPlanGroup {
+              id
+              sellingPlans(first: 1) { edges { node { id } } }
+            }
+            userErrors { field message }
+          }
+        }
+      `;
+
+      const spInput = {
+        name: "Group Buy Special Offer",
+        merchantCode: `GB-${Date.now()}`,
+        options: ["Discount Tier"],
+        position: 1,
+        sellingPlansToCreate: [{
+          name: "Join Group Buy (Pay $0 Today)",
+          options: ["Join Group Buy"],
+          position: 1,
+          category: "PRE_ORDER",
+          billingPolicy: { fixed: { checkoutCharge: { type: "PERCENTAGE", value: { percentage: 0 } }, remainingBalanceChargeTrigger: "EXACT_TIME", remainingBalanceChargeExactTime: newEndDateUtc.toISOString() } },
+          deliveryPolicy: { fixed: { fulfillmentTrigger: "EXACT_TIME", fulfillmentExactTime: newEndDateUtc.toISOString() } },
+          pricingPolicies: [{ fixed: { adjustmentType: "PERCENTAGE", adjustmentValue: { percentage: 0 } } }]
+        }]
+      };
+      
+      const spResources = { productIds: [productId], productVariantIds: newVariants };
+
+      const spResponse = await admin.graphql(spMutation, { variables: { input: spInput, resources: spResources } });
+      const spData = await spResponse.json();
+      
+      // ✅ 2. Save BOTH NEW IDs to our database update object
+      if (spData.data?.sellingPlanGroupCreate?.sellingPlanGroup) {
+        dataToUpdate.sellingPlanGroupId = spData.data.sellingPlanGroupCreate.sellingPlanGroup.id;
+        dataToUpdate.sellingPlanId = spData.data.sellingPlanGroupCreate.sellingPlanGroup.sellingPlans.edges[0].node.id;
+      }
+    }
+
+    // 💾 Finally, update NeonDB with all the new form data AND the new sellingPlanId
     if (Object.keys(dataToUpdate).length > 0) {
       await db.campaign.update({ where: { id: campaignId, shop: session.shop }, data: dataToUpdate });
     }

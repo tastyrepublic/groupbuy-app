@@ -78,6 +78,7 @@ export const loader = async ({ request }) => {
         status: campaignStatus,
         selectedVariantIdsJson: campaign.selectedVariantIdsJson,
         startingParticipants: campaign.startingParticipants, // Passed to frontend
+        sellingPlanId: campaign.sellingPlanId || "",
       },
       currentProgress: finalProgress, // Sent perfectly pre-calculated!
     });

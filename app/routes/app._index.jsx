@@ -122,13 +122,57 @@ export const loader = async ({ request }) => {
 };
 
 export const action = async ({ request }) => {
+  const { admin, session } = await authenticate.admin(request);
   const formData = await request.formData();
 
   if (formData.get("_action") === "delete") {
-    const campaignId = formData.get("campaignId");
-    await db.campaign.delete({
-      where: { id: parseInt(campaignId, 10) },
+    const campaignId = parseInt(formData.get("campaignId"), 10);
+    
+    // 1. Fetch the campaign to get the new sellingPlanGroupId
+    const campaign = await db.campaign.findUnique({
+      where: { id: campaignId, shop: session.shop }
     });
+
+    if (!campaign) {
+      return json({ error: "Campaign not found" }, { status: 404 });
+    }
+
+    // 2. Delete the Selling Plan Group from Shopify using the new ID architecture!
+    if (campaign.sellingPlanGroupId) {
+      try {
+        const deleteSellingPlanMutation = `
+          mutation sellingPlanGroupDelete($id: ID!) {
+            sellingPlanGroupDelete(id: $id) {
+              deletedSellingPlanGroupId
+              userErrors {
+                field
+                message
+              }
+            }
+          }
+        `;
+
+        const deleteResponse = await admin.graphql(deleteSellingPlanMutation, {
+          variables: { id: campaign.sellingPlanGroupId } // ✅ USING THE NEW COLUMN
+        });
+        
+        const deleteData = await deleteResponse.json();
+        
+        if (deleteData.data?.sellingPlanGroupDelete?.userErrors?.length > 0) {
+          console.error("Shopify failed to delete Selling Plan:", deleteData.data.sellingPlanGroupDelete.userErrors);
+        } else {
+          console.log(`✅ Successfully removed Selling Plan Group ${campaign.sellingPlanGroupId} from Shopify.`);
+        }
+      } catch (graphqlError) {
+        console.error("Network error deleting Selling Plan:", graphqlError);
+      }
+    }
+
+    // 3. Delete the campaign from our database
+    await db.campaign.delete({
+      where: { id: campaignId },
+    });
+    
     return json({ success: true });
   }
 }
@@ -220,22 +264,37 @@ function CampaignRow({ campaign, index, primaryDomainUrl, deleteFetcher }) {
   const [displayTimezone, setDisplayTimezone] = useState('Europe/London');
 
   const tiers = JSON.parse(campaign.tiersJson || '[]');
+  const tierTones = ['info', 'success', 'attention', 'warning', 'new'];
 
   const getDisplayStatus = (campaign) => {
+    // 1. If the database explicitly finished it, trust the database
     if (campaign.status === 'SUCCESSFUL' || campaign.status === 'FAILED') {
       return campaign.status.charAt(0).toUpperCase() + campaign.status.slice(1).toLowerCase();
     }
+
     const now = new Date();
     const startTime = new Date(campaign.startDateTime);
     const endTime = new Date(campaign.endDateTime);
+
+    // 2. If it hasn't started yet
     if (now < startTime) return 'Scheduled';
-    if (now >= startTime && now < endTime) return 'Active';
-    return 'Active'; 
+
+    // 3. If it is currently running in the active window
+    if (now >= startTime && now < endTime) {
+      if (campaign.status === 'PROCESSING') return 'Processing'; // Just in case
+      return 'Active';
+    }
+
+    // 4. THE FIX: Time is up, but the Sweeper hasn't finished the database updates yet
+    if (now >= endTime) return 'Processing';
+
+    return 'Unknown';
   };
 
   const getStatusBadgeTone = (status) => {
     switch (status) {
       case 'Active': return 'info';
+      case 'Processing': return 'warning'; // 🟡 Adds a yellow/orange badge while the backend works
       case 'Successful': return 'success';
       case 'Failed': return 'critical';
       case 'Scheduled': return 'attention';
@@ -331,7 +390,7 @@ function CampaignRow({ campaign, index, primaryDomainUrl, deleteFetcher }) {
             <DeleteCampaignButton 
                 campaignId={campaign.id.toString()} 
                 fetcher={deleteFetcher}
-                isEnded={getDisplayStatus(campaign) === 'Successful' || getDisplayStatus(campaign) === 'Failed'}
+                isEnded={['Successful', 'Failed', 'Processing'].includes(getDisplayStatus(campaign))}
             />
           </ButtonGroup>
         </IndexTable.Cell>
@@ -371,14 +430,24 @@ function CampaignRow({ campaign, index, primaryDomainUrl, deleteFetcher }) {
                       },
                       { term: 'Converted Start Time', description: formatForDisplay(campaign.startDateTime, displayTimezone) },
                       { term: 'Converted End Time', description: formatForDisplay(campaign.endDateTime, displayTimezone) },
+                      { 
+                        term: 'Discount Tiers', 
+                        description: tiers.length > 0 ? (
+                          <InlineStack gap="200" wrap>
+                            {tiers.map((tier, idx) => (
+                              <Badge 
+                                key={idx} 
+                                tone={tierTones[idx % tierTones.length]} 
+                              >
+                                {tier.quantity} {campaign.countingMethod === 'ITEM_QUANTITY' ? 'items' : 'buyers'} ➔ {tier.discount}% off
+                              </Badge>
+                            ))}
+                          </InlineStack>
+                        ) : (
+                          <Text variant="bodyMd" tone="subdued">No tiers configured.</Text>
+                        )
+                      }
                     ]}
-                  />
-                  <Text variant="headingMd" as="h2">Discount Tiers</Text>
-                  <DescriptionList
-                    items={tiers.map((tier, idx) => ({
-                      term: `Tier ${idx + 1}`,
-                      description: `A ${tier.discount}% discount for ${tier.quantity} or more participants.`
-                    }))}
                   />
                 </BlockStack>
               </Box>
