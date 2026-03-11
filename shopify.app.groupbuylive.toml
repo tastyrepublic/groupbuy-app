@@ -2,7 +2,7 @@
 
 client_id = "64f33a0c73521f54219f6883774470fa"
 name = "Group buy live store test"
-application_url = "https://electrical-layers-admitted-offered.trycloudflare.com"
+application_url = "https://jennifer-helped-cartridges-images.trycloudflare.com"
 embedded = true
 
 [webhooks]
@@ -32,12 +32,12 @@ use_legacy_install_flow = false
 
 [auth]
 redirect_urls = [
-  "https://electrical-layers-admitted-offered.trycloudflare.com/auth/shopify/callback",
-  "https://electrical-layers-admitted-offered.trycloudflare.com/api/auth/callback"
+  "https://jennifer-helped-cartridges-images.trycloudflare.com/auth/shopify/callback",
+  "https://jennifer-helped-cartridges-images.trycloudflare.com/api/auth/callback"
 ]
 
 [app_proxy]
-url = "https://electrical-layers-admitted-offered.trycloudflare.com/api"
+url = "https://jennifer-helped-cartridges-images.trycloudflare.com/api"
 subpath = "gbs"
 prefix = "apps"
 

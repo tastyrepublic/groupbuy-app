@@ -19,9 +19,100 @@
   div:has(> input[name="selling_plan"]) {
     display: none !important;
   }
+
+  /* ✨ SMOOTH FADE IN FOR CONTENT */
+  @keyframes gb-fade-in-up {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .gb-fade-in-up {
+    animation: gb-fade-in-up 0.4s ease-out forwards;
+  }
+  
+  /* ✨ LOADING SPINNER & OVERLAY */
+  .gb-loading-overlay {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(255, 255, 255, 0.7);
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+    border-radius: inherit;
+    animation: gb-fade-in 0.2s ease-out forwards;
+  }
+  .gb-spinner {
+    width: 28px; height: 28px;
+    border: 3px solid var(--gb-progress-bg-color, #e3e3e3);
+    border-bottom-color: var(--gb-progress-color, #005bd3);
+    border-radius: 50%;
+    display: inline-block;
+    animation: gb-rotation 1s linear infinite;
+  }
+  @keyframes gb-rotation {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+  @keyframes gb-fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
 </style>
 
-<div class="gb-widget" 
+<group-buy-widget class="gb-widget" 
+  style="
+    --gb-title-display: {% if block.settings.show_title %}block{% else %}none{% endif %};
+    --gb-title-size: {{ block.settings.title_size }}px;
+    --gb-title-color: {{ block.settings.title_color }};
+    --gb-title-align: {{ block.settings.title_align }};
+    --gb-title-weight: {{ block.settings.title_weight }};
+    --gb-title-style: {{ block.settings.title_style }};
+    --gb-desc-display: {% if block.settings.show_desc %}block{% else %}none{% endif %};
+    --gb-desc-size: {{ block.settings.desc_size }}px;
+    --gb-desc-color: {{ block.settings.desc_color }};
+    --gb-desc-weight: {{ block.settings.desc_weight }};
+    --gb-desc-style: {{ block.settings.desc_style }};
+    --gb-bg-color: {{ block.settings.bg_color }};
+    --gb-box-radius: {{ block.settings.box_radius }}px;
+    --gb-border: {% if block.settings.show_border %}{{ block.settings.box_border_width }}px solid {{ block.settings.box_border_color | default: '#e3e3e3' }}{% else %}none{% endif %};
+    --gb-progress-bg-color: {{ block.settings.progress_bg_color }};
+    --gb-progress-color: {{ block.settings.progress_color }};
+    --gb-progress-text-color: {{ block.settings.progress_text_color }};
+    --gb-progress-height: {{ block.settings.progress_height }}px;
+    --gb-progress-radius: {{ block.settings.progress_radius }}px;
+    --gb-badge-display: {% if block.settings.show_badges %}flex{% else %}none{% endif %};
+    --gb-badge-bg: {{ block.settings.badge_bg }};
+    --gb-badge-text: {{ block.settings.badge_text }};
+    --gb-badge-border: {% if block.settings.show_badge_border %}{{ block.settings.badge_border_size }}px solid {{ block.settings.badge_border_color }}{% else %}none{% endif %};
+    --gb-badge-radius: {{ block.settings.badge_radius }}px;
+    --gb-badge-size: {{ block.settings.badge_size }}px;
+    --gb-clock-wrapper-bg: {{ block.settings.clock_wrapper_bg }};
+    --gb-clock-wrapper-border: {% if block.settings.show_clock_wrapper_border %}{{ block.settings.clock_wrapper_border_width }}px solid {{ block.settings.clock_wrapper_border_color }}{% else %}none{% endif %};
+    --gb-clock-wrapper-radius: {{ block.settings.clock_wrapper_radius }}px;
+    --gb-clock-bg-color: {{ block.settings.clock_bg_color }};
+    --gb-clock-text-color: {{ block.settings.clock_text_color }};
+    --gb-clock-radius: {{ block.settings.clock_radius }}px;
+    --gb-clock-border: {% if block.settings.show_clock_border %}{{ block.settings.clock_border_width }}px solid {{ block.settings.clock_border_color }}{% else %}none{% endif %};
+    --gb-clock-shadow: {% if block.settings.clock_shadow == 0 or block.settings.clock_shadow_opacity == 0 %}none{% else %}0px 4px {{ block.settings.clock_shadow }}px rgba(0,0,0,{{ block.settings.clock_shadow_opacity | divided_by: 100.0 }}){% endif %};
+    --gb-clock-size: {{ block.settings.clock_size }}px;
+    --gb-qty-height: {{ block.settings.qty_size }}px;
+    --gb-btn-bg: {{ block.settings.btn_bg }};
+    --gb-btn-text-color: {{ block.settings.btn_text_color }};
+    --gb-btn-radius: {{ block.settings.btn_radius }}px;
+    --gb-btn-padding: {{ block.settings.btn_size }}px;
+    display: block;
+  "
+  data-title-text="{{ block.settings.title_text | escape }}"
+  data-not-included-text="{{ block.settings.not_included_text | escape }}"
+  data-badge-format="{{ block.settings.badge_format }}"
+  data-progress-format="{{ block.settings.progress_format }}"
+  data-clock-layout="{{ block.settings.clock_layout }}"
+  data-clock-full-width="{{ block.settings.clock_full_width }}"
+  data-currency-symbol="{{ cart.currency.symbol }}"
+  data-product-price="{{ product.selected_or_first_available_variant.price | divided_by: 100.0 }}"
   data-product-id="{{ product.id }}"
   data-variant-id="{{ product.selected_or_first_available_variant.id }}"
   data-shop="{{ shop.permanent_domain }}"
@@ -30,16 +121,470 @@
   data-login-url="{{ routes.account_login_url }}"
   data-fb-projectid="groupbuy-app-635bf"
 >
-  <div class="gb-loading-container">
-    <p>Loading Group Buy Deal...</p>
-  </div>
-</div>
+</group-buy-widget>
 
 {% schema %}
   {
     "name": "Group Buy Widget",
     "target": "section",
     "stylesheet": "progress-bar.css",
-    "settings": []
+    "settings": [
+      {
+        "type": "header",
+        "content": "Box & Title Styling"
+      },
+      {
+        "type": "text",
+        "id": "not_included_text",
+        "label": "Text when Variant is Not Included",
+        "default": "This variant is not included in the current group buy."
+      },
+      {
+        "type": "checkbox",
+        "id": "show_title",
+        "label": "Show Title",
+        "default": true
+      },
+      {
+        "type": "text",
+        "id": "title_text",
+        "label": "Custom Title Text",
+        "default": "Unlock Group Discounts"
+      },
+      {
+        "type": "range",
+        "id": "title_size",
+        "min": 12,
+        "max": 36,
+        "step": 1,
+        "unit": "px",
+        "label": "Title Text Size",
+        "default": 16
+      },
+      {
+        "type": "color",
+        "id": "title_color",
+        "label": "Title Text Color",
+        "default": "#202223"
+      },
+      {
+        "type": "select",
+        "id": "title_weight",
+        "label": "Title Font Weight",
+        "options": [
+          { "value": "400", "label": "Normal" },
+          { "value": "700", "label": "Bold" },
+          { "value": "900", "label": "Extra Bold" }
+        ],
+        "default": "700"
+      },
+      {
+        "type": "select",
+        "id": "title_style",
+        "label": "Title Font Style",
+        "options": [
+          { "value": "normal", "label": "Normal" },
+          { "value": "italic", "label": "Italic" }
+        ],
+        "default": "normal"
+      },
+      {
+        "type": "select",
+        "id": "title_align",
+        "label": "Title Alignment",
+        "options": [
+          { "value": "left", "label": "Left" },
+          { "value": "center", "label": "Center" },
+          { "value": "right", "label": "Right" }
+        ],
+        "default": "center"
+      },
+      {
+        "type": "checkbox",
+        "id": "show_desc",
+        "label": "Show Description",
+        "default": true
+      },
+      {
+        "type": "range",
+        "id": "desc_size",
+        "min": 10,
+        "max": 24,
+        "step": 1,
+        "unit": "px",
+        "label": "Description Text Size",
+        "default": 13
+      },
+      {
+        "type": "color",
+        "id": "desc_color",
+        "label": "Description Text Color",
+        "default": "#5c5f62"
+      },
+      {
+        "type": "select",
+        "id": "desc_weight",
+        "label": "Description Font Weight",
+        "options": [
+          { "value": "400", "label": "Normal" },
+          { "value": "700", "label": "Bold" },
+          { "value": "900", "label": "Extra Bold" }
+        ],
+        "default": "400"
+      },
+      {
+        "type": "select",
+        "id": "desc_style",
+        "label": "Description Font Style",
+        "options": [
+          { "value": "normal", "label": "Normal" },
+          { "value": "italic", "label": "Italic" }
+        ],
+        "default": "normal"
+      },
+      {
+        "type": "color",
+        "id": "bg_color",
+        "label": "Background Color",
+        "default": "#fafafa"
+      },
+      {
+        "type": "checkbox",
+        "id": "show_border",
+        "label": "Show Card Border",
+        "default": true
+      },
+      {
+        "type": "range",
+        "id": "box_border_width",
+        "min": 1,
+        "max": 10,
+        "step": 1,
+        "unit": "px",
+        "label": "Card Border Width",
+        "default": 1
+      },
+      {
+        "type": "color",
+        "id": "box_border_color",
+        "label": "Card Border Color",
+        "default": "#e3e3e3"
+      },
+      {
+        "type": "range",
+        "id": "box_radius",
+        "min": 0,
+        "max": 40,
+        "step": 2,
+        "unit": "px",
+        "label": "Box Corner Radius",
+        "default": 8
+      },
+      {
+        "type": "header",
+        "content": "Badges & Progress Bar"
+      },
+      {
+        "type": "checkbox",
+        "id": "show_badges",
+        "label": "Show Discount Badges",
+        "default": true
+      },
+      {
+        "type": "select",
+        "id": "badge_format",
+        "label": "Badge Display Format",
+        "options": [
+          { "value": "percentage", "label": "Percentage (e.g. 10% off)" },
+          { "value": "price", "label": "Discounted Price (e.g. $45.00)" }
+        ],
+        "default": "percentage"
+      },
+      {
+        "type": "range",
+        "id": "badge_size",
+        "min": 10,
+        "max": 20,
+        "step": 1,
+        "unit": "px",
+        "label": "Badge Text Size",
+        "default": 12
+      },
+      {
+        "type": "color",
+        "id": "badge_bg",
+        "label": "Badge Background Color",
+        "default": "#E1F3FF"
+      },
+      {
+        "type": "color",
+        "id": "badge_text",
+        "label": "Badge Text Color",
+        "default": "#005bd3"
+      },
+      {
+        "type": "checkbox",
+        "id": "show_badge_border",
+        "label": "Show Badge Border",
+        "default": false
+      },
+      {
+        "type": "range",
+        "id": "badge_border_size",
+        "min": 1,
+        "max": 5,
+        "step": 1,
+        "unit": "px",
+        "label": "Badge Border Width",
+        "default": 1
+      },
+      {
+        "type": "color",
+        "id": "badge_border_color",
+        "label": "Badge Border Color",
+        "default": "#005bd3"
+      },
+      {
+        "type": "range",
+        "id": "badge_radius",
+        "min": 0,
+        "max": 40,
+        "step": 2,
+        "unit": "px",
+        "label": "Badge Corner Radius",
+        "default": 12
+      },
+      {
+        "type": "select",
+        "id": "progress_format",
+        "label": "Progress Track Display Format",
+        "options": [
+          { "value": "percentage", "label": "Percentage (e.g. 10% off)" },
+          { "value": "price", "label": "Discounted Price (e.g. $45.00)" }
+        ],
+        "default": "percentage"
+      },
+      {
+        "type": "range",
+        "id": "progress_height",
+        "min": 4,
+        "max": 40,
+        "step": 2,
+        "unit": "px",
+        "label": "Progress Bar Height",
+        "default": 8
+      },
+      {
+        "type": "range",
+        "id": "progress_radius",
+        "min": 0,
+        "max": 40,
+        "step": 2,
+        "unit": "px",
+        "label": "Progress Bar Corner Radius",
+        "default": 4
+      },
+      {
+        "type": "color",
+        "id": "progress_bg_color",
+        "label": "Progress Bar Track Background",
+        "default": "#e3e3e3"
+      },
+      {
+        "type": "color_background",
+        "id": "progress_color",
+        "label": "Progress Bar Fill (Solid or Gradient)",
+        "default": "#005bd3"
+      },
+      {
+        "type": "color",
+        "id": "progress_text_color",
+        "label": "Progress Text Color",
+        "default": "#202223"
+      },
+      {
+        "type": "header",
+        "content": "Countdown Clock Styling"
+      },
+      {
+        "type": "select",
+        "id": "clock_layout",
+        "label": "Clock Style",
+        "options": [
+          { "value": "boxes", "label": "Individual Boxes" },
+          { "value": "card", "label": "Single Card Wrapper" },
+          { "value": "box_in_box", "label": "Box-in-Box (Wrapper + Inner Boxes)" }
+        ],
+        "default": "boxes"
+      },
+      {
+        "type": "checkbox",
+        "id": "clock_full_width",
+        "label": "Make Clock Wrapper Full Width",
+        "default": true
+      },
+      {
+        "type": "color",
+        "id": "clock_wrapper_bg",
+        "label": "Box-in-Box Outer Background",
+        "default": "#f4f4f4"
+      },
+      {
+        "type": "checkbox",
+        "id": "show_clock_wrapper_border",
+        "label": "Show Box-in-Box Outer Border",
+        "default": false
+      },
+      {
+        "type": "range",
+        "id": "clock_wrapper_border_width",
+        "min": 1,
+        "max": 5,
+        "step": 1,
+        "unit": "px",
+        "label": "Box-in-Box Outer Border Width",
+        "default": 1
+      },
+      {
+        "type": "color",
+        "id": "clock_wrapper_border_color",
+        "label": "Box-in-Box Outer Border Color",
+        "default": "#e3e3e3"
+      },
+      {
+        "type": "range",
+        "id": "clock_wrapper_radius",
+        "min": 0,
+        "max": 40,
+        "step": 2,
+        "unit": "px",
+        "label": "Box-in-Box Outer Radius",
+        "default": 12
+      },
+      {
+        "type": "color",
+        "id": "clock_bg_color",
+        "label": "Clock Inner Background Color",
+        "default": "#ffffff"
+      },
+      {
+        "type": "color",
+        "id": "clock_text_color",
+        "label": "Clock Text Color",
+        "default": "#202223"
+      },
+      {
+        "type": "checkbox",
+        "id": "show_clock_border",
+        "label": "Show Clock Inner Border",
+        "default": true
+      },
+      {
+        "type": "range",
+        "id": "clock_border_width",
+        "min": 1,
+        "max": 5,
+        "step": 1,
+        "unit": "px",
+        "label": "Clock Inner Border Width",
+        "default": 1
+      },
+      {
+        "type": "color",
+        "id": "clock_border_color",
+        "label": "Clock Inner Border Color",
+        "default": "#dfe3e8"
+      },
+      {
+        "type": "range",
+        "id": "clock_radius",
+        "min": 0,
+        "max": 40,
+        "step": 2,
+        "unit": "px",
+        "label": "Clock Box Radius",
+        "default": 8
+      },
+      {
+        "type": "range",
+        "id": "clock_size",
+        "min": 30,
+        "max": 80,
+        "step": 2,
+        "unit": "px",
+        "label": "Clock Overall Size",
+        "default": 48
+      },
+      {
+        "type": "range",
+        "id": "clock_shadow",
+        "min": 0,
+        "max": 30,
+        "step": 1,
+        "unit": "px",
+        "label": "Clock Drop Shadow Blur",
+        "default": 10
+      },
+      {
+        "type": "range",
+        "id": "clock_shadow_opacity",
+        "min": 0,
+        "max": 100,
+        "step": 5,
+        "unit": "%",
+        "label": "Clock Drop Shadow Opacity",
+        "default": 15
+      },
+      {
+        "type": "header",
+        "content": "Quantity Selector"
+      },
+      {
+        "type": "range",
+        "id": "qty_size",
+        "min": 32,
+        "max": 64,
+        "step": 2,
+        "unit": "px",
+        "label": "Quantity Selector Height",
+        "default": 46
+      },
+      {
+        "type": "header",
+        "content": "Button Styling"
+      },
+      {
+        "type": "color_background",
+        "id": "btn_bg",
+        "label": "Button Background (Solid or Gradient)",
+        "default": "linear-gradient(to right, #000000, #434343)"
+      },
+      {
+        "type": "color",
+        "id": "btn_text_color",
+        "label": "Button Text Color",
+        "default": "#ffffff"
+      },
+      {
+        "type": "range",
+        "id": "btn_size",
+        "min": 10,
+        "max": 30,
+        "step": 1,
+        "unit": "px",
+        "label": "Button Size (Padding)",
+        "default": 14
+      },
+      {
+        "type": "range",
+        "id": "btn_radius",
+        "min": 0,
+        "max": 40,
+        "step": 2,
+        "unit": "px",
+        "label": "Button Radius",
+        "default": 4
+      }
+    ]
   }
 {% endschema %}
