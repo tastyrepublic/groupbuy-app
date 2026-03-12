@@ -2,7 +2,7 @@
 
 client_id = "64f33a0c73521f54219f6883774470fa"
 name = "Group buy live store test"
-application_url = "https://jennifer-helped-cartridges-images.trycloudflare.com"
+application_url = "https://highest-pod-volunteer-jaguar.trycloudflare.com"
 embedded = true
 
 [webhooks]
@@ -32,12 +32,12 @@ use_legacy_install_flow = false
 
 [auth]
 redirect_urls = [
-  "https://jennifer-helped-cartridges-images.trycloudflare.com/auth/shopify/callback",
-  "https://jennifer-helped-cartridges-images.trycloudflare.com/api/auth/callback"
+  "https://highest-pod-volunteer-jaguar.trycloudflare.com/auth/shopify/callback",
+  "https://highest-pod-volunteer-jaguar.trycloudflare.com/api/auth/callback"
 ]
 
 [app_proxy]
-url = "https://jennifer-helped-cartridges-images.trycloudflare.com/api"
+url = "https://highest-pod-volunteer-jaguar.trycloudflare.com/api"
 subpath = "gbs"
 prefix = "apps"
 

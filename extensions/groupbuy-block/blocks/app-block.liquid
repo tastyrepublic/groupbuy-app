@@ -103,6 +103,18 @@
     --gb-btn-text-color: {{ block.settings.btn_text_color }};
     --gb-btn-radius: {{ block.settings.btn_radius }}px;
     --gb-btn-padding: {{ block.settings.btn_size }}px;
+    --gb-leader-bg: {{ block.settings.leader_bg_color }};
+    --gb-leader-text: {{ block.settings.leader_text_color }};
+    --gb-leader-border: {% if block.settings.show_leader_border %}{{ block.settings.leader_border_width }}px solid {{ block.settings.leader_border_color }}{% else %}none{% endif %};
+    --gb-leader-msg-bg: {% if block.settings.leader_msg_show_card %}{{ block.settings.leader_msg_bg_color }}{% else %}transparent{% endif %};
+    --gb-leader-msg-color: {{ block.settings.leader_msg_text_color }};
+    --gb-leader-msg-size: {{ block.settings.leader_msg_font_size }}px;
+    --gb-leader-msg-style: {{ block.settings.leader_msg_font_style }};
+    --gb-leader-msg-border: {% if block.settings.leader_msg_show_border %}{{ block.settings.leader_msg_border_width }}px solid {{ block.settings.leader_msg_border_color }}{% else %}none{% endif %};
+    --gb-leader-msg-padding: {% if block.settings.leader_msg_show_card or block.settings.leader_msg_show_border %}8px 12px{% else %}0 0 8px 0{% endif %};
+    --gb-leader-msg-radius: {{ block.settings.leader_msg_radius }}px;
+    --gb-scheduled-bg: {{ block.settings.scheduled_bg_color }};
+    --gb-scheduled-border: {% if block.settings.show_scheduled_border %}{{ block.settings.scheduled_border_width }}px solid {{ block.settings.scheduled_border_color }}{% else %}none{% endif %};
     display: block;
   "
   data-title-text="{{ block.settings.title_text | escape }}"
@@ -120,6 +132,8 @@
   data-customer-id="{% if customer %}{{ customer.id }}{% endif %}"
   data-login-url="{{ routes.account_login_url }}"
   data-fb-projectid="groupbuy-app-635bf"
+  data-scheduled-badges="{% if block.settings.scheduled_show_badges %}true{% else %}false{% endif %}"
+  data-editor-preview="{{ block.settings.editor_preview_state }}"
 >
 </group-buy-widget>
 
@@ -132,6 +146,18 @@
       {
         "type": "header",
         "content": "Box & Title Styling"
+      },
+      {
+        "type": "select",
+        "id": "editor_preview_state",
+        "label": "Theme Editor Preview State",
+        "info": "Choose which campaign state to preview while editing.",
+        "options": [
+          { "value": "ACTIVE", "label": "Active Campaign" },
+          { "value": "SCHEDULED", "label": "Scheduled Campaign" },
+          { "value": "ENDED", "label": "Ended Campaign" }
+        ],
+        "default": "ACTIVE"
       },
       {
         "type": "text",
@@ -279,6 +305,40 @@
         "unit": "px",
         "label": "Box Corner Radius",
         "default": 8
+      },
+      {
+        "type": "color",
+        "id": "scheduled_bg_color",
+        "label": "Scheduled/Ended Box Background",
+        "default": "#fafafa"
+      },
+      {
+        "type": "checkbox",
+        "id": "show_scheduled_border",
+        "label": "Show Scheduled/Ended Border",
+        "default": true
+      },
+      {
+        "type": "range",
+        "id": "scheduled_border_width",
+        "min": 1,
+        "max": 5,
+        "step": 1,
+        "unit": "px",
+        "label": "Scheduled/Ended Border Width",
+        "default": 1
+      },
+      {
+        "type": "color",
+        "id": "scheduled_border_color",
+        "label": "Scheduled/Ended Border Color",
+        "default": "#e3e3e3"
+      },
+      {
+        "type": "checkbox",
+        "id": "scheduled_show_badges",
+        "label": "Show Badges on Scheduled Campaign",
+        "default": true
       },
       {
         "type": "header",
@@ -548,6 +608,124 @@
         "unit": "px",
         "label": "Quantity Selector Height",
         "default": 46
+      },
+      {
+        "type": "header",
+        "content": "Leader Settings (Banner & Message)"
+      },
+      {
+        "type": "color",
+        "id": "leader_bg_color",
+        "label": "Banner Background Color",
+        "default": "#FFFBEB"
+      },
+      {
+        "type": "color",
+        "id": "leader_text_color",
+        "label": "Banner Text Color",
+        "default": "#8A6D3B"
+      },
+      {
+        "type": "checkbox",
+        "id": "show_leader_border",
+        "label": "Show Banner Border",
+        "default": true
+      },
+      {
+        "type": "range",
+        "id": "leader_border_width",
+        "min": 1,
+        "max": 5,
+        "step": 1,
+        "unit": "px",
+        "label": "Banner Border Width",
+        "default": 1
+      },
+      {
+        "type": "color",
+        "id": "leader_border_color",
+        "label": "Banner Border Color",
+        "default": "#FCEB9F"
+      },
+      {
+        "type": "range",
+        "id": "leader_radius",
+        "min": 0,
+        "max": 40,
+        "step": 2,
+        "unit": "px",
+        "label": "Banner Corner Radius",
+        "default": 6
+      },
+      {
+        "type": "checkbox",
+        "id": "leader_msg_show_card",
+        "label": "Show as Card (Background)",
+        "default": false
+      },
+      {
+        "type": "color",
+        "id": "leader_msg_bg_color",
+        "label": "Message Background Color",
+        "default": "#FFFBEB"
+      },
+      {
+        "type": "color",
+        "id": "leader_msg_text_color",
+        "label": "Message Text Color",
+        "default": "#D48806"
+      },
+      {
+        "type": "range",
+        "id": "leader_msg_font_size",
+        "min": 10,
+        "max": 24,
+        "step": 1,
+        "unit": "px",
+        "label": "Message Font Size",
+        "default": 13
+      },
+      {
+        "type": "select",
+        "id": "leader_msg_font_style",
+        "label": "Message Font Style",
+        "options": [
+          { "value": "normal", "label": "Normal" },
+          { "value": "italic", "label": "Italic" }
+        ],
+        "default": "normal"
+      },
+      {
+        "type": "checkbox",
+        "id": "leader_msg_show_border",
+        "label": "Show Message Border",
+        "default": false
+      },
+      {
+        "type": "range",
+        "id": "leader_msg_border_width",
+        "min": 1,
+        "max": 5,
+        "step": 1,
+        "unit": "px",
+        "label": "Message Border Width",
+        "default": 1
+      },
+      {
+        "type": "color",
+        "id": "leader_msg_border_color",
+        "label": "Message Border Color",
+        "default": "#FCEB9F"
+      },
+      {
+        "type": "range",
+        "id": "leader_msg_radius",
+        "min": 0,
+        "max": 40,
+        "step": 2,
+        "unit": "px",
+        "label": "Message Corner Radius",
+        "default": 6
       },
       {
         "type": "header",

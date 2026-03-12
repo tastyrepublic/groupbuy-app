@@ -90,6 +90,7 @@ exports.processGroupBuyOrder = onMessagePublished("shopify-orders-create", async
             where: {
               customerId: customerId,
               orderId: { not: orderId },
+              status: "ACTIVE", // ✅ THE FIX: Ignore their cancelled orders!
               group: { campaignId: campaign.id },
               ...(campaign.scope === 'VARIANT' ? { productVariantId: fullVariantId } : {})
             }
@@ -662,16 +663,37 @@ exports.processOrderCancellation = onMessagePublished("shopify-orders-cancelled"
           data: { status: "CANCELLED", isLeader: false }
         });
 
-        // UI ROLLBACK
-        let progressDelta = campaign.countingMethod === 'ITEM_QUANTITY' ? existingOrder.quantity : 1;
-        let docId = campaign.scope === 'VARIANT' ? `campaign_${campaign.id}_variant_${targetItem.variant_id}` : `campaign_${campaign.id}`;
+        // ✅ THE FIX: SMART UI ROLLBACK
+        let progressDelta = 0;
+        
+        if (campaign.countingMethod === 'ITEM_QUANTITY') {
+          progressDelta = existingOrder.quantity;
+        } else {
+          // It is PARTICIPANT mode. Does this user have ANY OTHER active orders?
+          const remainingActiveOrders = await prisma.participant.count({
+            where: {
+              customerId: existingOrder.customerId,
+              status: "ACTIVE",
+              group: { campaignId: campaign.id }
+            }
+          });
+          
+          // If they have other active orders, subtract 0. If this was their last one, subtract 1.
+          progressDelta = remainingActiveOrders > 0 ? 0 : 1;
+        }
 
-        await firestore.collection("campaignProgress").doc(docId).set({
-          progress: FieldValue.increment(-progressDelta),
-          updatedAt: FieldValue.serverTimestamp()
-        }, { merge: true });
+        if (progressDelta > 0) {
+          let docId = campaign.scope === 'VARIANT' ? `campaign_${campaign.id}_variant_${targetItem.variant_id}` : `campaign_${campaign.id}`;
 
-        console.log(`  📉 Rolled back progress for canceled order ${orderId}.`);
+          await firestore.collection("campaignProgress").doc(docId).set({
+            progress: FieldValue.increment(-progressDelta),
+            updatedAt: FieldValue.serverTimestamp()
+          }, { merge: true });
+
+          console.log(`  📉 Rolled back progress for canceled order ${orderId} by -${progressDelta}.`);
+        } else {
+          console.log(`  📉 Skipped rollback for ${orderId}: User still has other active orders.`);
+        }
 
         // LEADER SHIFT: Pass the crown if the leader canceled
         if (existingOrder.isLeader) {

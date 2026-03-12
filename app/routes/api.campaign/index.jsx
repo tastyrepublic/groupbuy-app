@@ -15,39 +15,67 @@ export const loader = async ({ request }) => {
   const fullVariantId = `gid://shopify/ProductVariant/${variantId}`;
   const simpleVariantId = variantId.split('/').pop();
   const now = new Date();
+  
+  // Look back 30 days to catch recently ended campaigns
+  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
   try {
+    // 1. Fetch ALL campaigns in the last 30 days (Active, Scheduled, and Ended)
     const potentialCampaigns = await db.campaign.findMany({
       where: {
         productId: fullProductId,
         shop: shop,
-        status: "ACTIVE",
-        endDateTime: { gte: now },
-      },
+        endDateTime: { gte: thirtyDaysAgo },
+      }
     });
 
-    if (potentialCampaigns.length === 0) return json({ campaign: null }, { status: 404 });
+    if (potentialCampaigns.length === 0) {
+      return json({ campaign: null, productHasCampaign: false }); 
+    }
 
-    let campaign = potentialCampaigns.find(c => {
+    // 2. Filter down to ONLY campaigns that include this specific variant
+    const matchingCampaigns = potentialCampaigns.filter(c => {
       const selectedIds = JSON.parse(c.selectedVariantIdsJson || '[]');
       return selectedIds.includes(fullVariantId);
     });
 
-    if (!campaign) return json({ campaign: null }, { status: 404 });
+    if (matchingCampaigns.length === 0) {
+      return json({ campaign: null, productHasCampaign: true, message: "Variant not included" });
+    }
 
-    const campaignStatus = new Date(campaign.startDateTime) > now ? "SCHEDULED" : "ACTIVE";
+    // 3. Helper function to determine the exact live status of a campaign
+    const getStatus = (c) => {
+      if (new Date(c.startDateTime) > now) return "SCHEDULED";
+      if (new Date(c.endDateTime) < now || c.status !== "ACTIVE") return "ENDED";
+      return "ACTIVE";
+    };
+
+    // 4. Sort by Priority! (ACTIVE > SCHEDULED > ENDED)
+    matchingCampaigns.sort((a, b) => {
+      const statusA = getStatus(a);
+      const statusB = getStatus(b);
+      const priority = { "ACTIVE": 1, "SCHEDULED": 2, "ENDED": 3 };
+      
+      if (priority[statusA] !== priority[statusB]) {
+        return priority[statusA] - priority[statusB]; // Highest priority wins
+      }
+      // If they have the exact same status, show the one ending furthest in the future
+      return new Date(b.endDateTime) - new Date(a.endDateTime);
+    });
+
+    // 5. Grab the undisputed winner
+    const campaign = matchingCampaigns[0];
+    const campaignStatus = getStatus(campaign);
     
-    // Start with your fake count (the baseline)
     let finalProgress = campaign.startingParticipants; 
 
-    // ✅ THE PLATINUM FIX: Lightweight REST Fetch instead of firebase-admin
+    // Only hit Firebase if the campaign is actively running
     if (campaignStatus === "ACTIVE") {
       let docId = `campaign_${campaign.id}`;
       if (campaign.scope === 'VARIANT') {
          docId = `campaign_${campaign.id}_variant_${simpleVariantId}`;
       }
 
-      // We know your Firebase project ID from your frontend code
       const projectId = "groupbuy-app-635bf"; 
       const firestoreUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/campaignProgress/${docId}`;
 
@@ -55,10 +83,9 @@ export const loader = async ({ request }) => {
         const fsResponse = await fetch(firestoreUrl);
         if (fsResponse.ok) {
           const fsData = await fsResponse.json();
-          // Firestore REST API returns numbers inside specific type keys
           if (fsData.fields && fsData.fields.progress) {
             const liveDelta = parseInt(fsData.fields.progress.integerValue || 0, 10);
-            finalProgress += liveDelta; // Add live sales to the fake count!
+            finalProgress += liveDelta; 
           }
         }
       } catch (e) {
@@ -77,10 +104,11 @@ export const loader = async ({ request }) => {
         countingMethod: campaign.countingMethod,
         status: campaignStatus,
         selectedVariantIdsJson: campaign.selectedVariantIdsJson,
-        startingParticipants: campaign.startingParticipants, // Passed to frontend
+        startingParticipants: campaign.startingParticipants, 
         sellingPlanId: campaign.sellingPlanId || "",
+        leaderDiscount: campaign.leaderDiscount,
       },
-      currentProgress: finalProgress, // Sent perfectly pre-calculated!
+      currentProgress: finalProgress, 
     });
     
   } catch (error) {

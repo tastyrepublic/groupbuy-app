@@ -39,6 +39,7 @@ export const loader = async ({ request }) => {
     const participant = await db.participant.findFirst({
       where: {
         customerId: fullCustomerId,
+        status: "ACTIVE", // ✅ NEW: Ignore cancelled records!
         group: {
           campaignId: campaign.id,
         },
@@ -46,6 +47,9 @@ export const loader = async ({ request }) => {
     });
 
     let hasJoined = !!participant;
+    let isLeader = participant ? participant.isLeader : false;
+    let pendingContribution = 0; 
+    
     console.log(`[Check-Status API] 📊 DB Participant Check Result: hasJoined = ${hasJoined}`);
 
     // The Webhook Gap Fix: Live check Shopify API if DB says false!
@@ -67,6 +71,7 @@ export const loader = async ({ request }) => {
                     cancelledAt
                     lineItems(first: 20) {
                       nodes {
+                        quantity
                         customAttributes {
                           key
                           value
@@ -90,29 +95,36 @@ export const loader = async ({ request }) => {
           console.log(`[Check-Status API] 🛒 Found ${orders.length} recent orders to scan.`);
 
           for (const order of orders) {
+            console.log(`[Check-Status API] 🔍 Evaluating Order ${order.name} | Cancelled At: ${order.cancelledAt || 'Not Cancelled'}`);
+
             if (order.cancelledAt) {
               console.log(`[Check-Status API] 🚫 Skipping Order ${order.name} (Status: Cancelled)`);
               continue;
             }
 
-            console.log(`[Check-Status API] 🔍 Inspecting line items for Order ${order.name}...`);
+            let foundQuantity = 0;
             
             const hasCampaignItem = order.lineItems.nodes.some(item => {
-              // This log will print the properties of every item it checks!
-              console.log(`   -> Item properties:`, JSON.stringify(item.customAttributes));
+              console.log(`   -> Item attributes:`, JSON.stringify(item.customAttributes));
               
-              return item.customAttributes.some(attr => 
-                // ✅ FIX: Force both to be strings so they match perfectly! (e.g. "129" === "129")
+              const isMatch = item.customAttributes.some(attr => 
                 attr.key === "_groupbuy_campaign_id" && String(attr.value) === String(campaign.id)
               );
+              
+              if (isMatch) {
+                 foundQuantity = item.quantity;
+                 console.log(`   -> 🎯 MATCH FOUND! Current Campaign ID (${campaign.id}) matches attribute.`);
+              }
+              return isMatch;
             });
 
             if (hasCampaignItem) {
-              console.log(`[Check-Status API] 🎉 BINGO! Found group buy item in Order ${order.name}! Overriding DB.`);
               hasJoined = true;
+              pendingContribution = campaign.countingMethod === "ITEM_QUANTITY" ? foundQuantity : 1;
+              console.log(`[Check-Status API] 🎉 BINGO! Overriding DB because we found Campaign ${campaign.id} in Order ${order.name}!`);
               break; 
             } else {
-              console.log(`[Check-Status API] ❌ Checked Order ${order.name}: No match.`);
+              console.log(`[Check-Status API] ❌ Checked Order ${order.name}: No match for Campaign ID ${campaign.id}.`);
             }
           }
         } else {
@@ -122,14 +134,16 @@ export const loader = async ({ request }) => {
         console.error("[Check-Status API] 💥 Shopify API Fallback Error:", shopifyError);
       }
     }
-
-    console.log(`[Check-Status API] 🏁 FINAL RESULT: Returning hasJoined = ${hasJoined} to storefront.`);
-    console.log("-------------------------------------------------");
     
+    console.log(`[Check-Status API] 🏁 FINAL RESULT: Returning hasJoined = ${hasJoined}, pendingContribution = ${pendingContribution} to storefront.`);
+    console.log("-------------------------------------------------");
+
     return json({ 
-      hasJoined: hasJoined, 
+      hasJoined: hasJoined,
+      isLeader: isLeader, 
       scope: campaign.scope,
-      countingMethod: campaign.countingMethod 
+      countingMethod: campaign.countingMethod,
+      pendingContribution: pendingContribution 
     }); 
 
   } catch (error) {
