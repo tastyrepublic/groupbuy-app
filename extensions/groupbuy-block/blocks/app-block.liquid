@@ -58,6 +58,19 @@
     from { opacity: 0; }
     to { opacity: 1; }
   }
+  /* TEST A: Force 100% Width of Parent Container */
+  .gb-widget {
+    display: block !important;
+    width: 100% !important;
+  }
+  
+  .gb-wrapper {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    box-sizing: border-box !important;
+  }
 </style>
 
 <group-buy-widget class="gb-widget" 
@@ -104,6 +117,7 @@
     --gb-leader-bg: {{ block.settings.leader_bg_color }};
     --gb-leader-text: {{ block.settings.leader_text_color }};
     --gb-leader-border: {% if block.settings.show_leader_border %}{{ block.settings.leader_border_width }}px solid {{ block.settings.leader_border_color }}{% else %}none{% endif %};
+    --gb-leader-radius: {{ block.settings.leader_radius }}px;
     --gb-leader-msg-bg: {% if block.settings.leader_msg_show_card %}{{ block.settings.leader_msg_bg_color }}{% else %}transparent{% endif %};
     --gb-leader-msg-color: {{ block.settings.leader_msg_text_color }};
     --gb-leader-msg-size: {{ block.settings.leader_msg_font_size }}px;
@@ -135,8 +149,10 @@
   data-t-participants="{{ 'general.participants' | t | escape }}"
   data-t-items-count="{{ 'general.items_count' | t | escape }}"
   data-t-people-count="{{ 'general.people_count' | t | escape }}"
-  data-t-items-req="{{ 'general.items_req' | t | escape }}"
-  data-t-people-req="{{ 'general.people_req' | t | escape }}"
+  data-t-req-qty-product="{{ 'general.req_qty_product' | t | escape }}"
+  data-t-req-qty-variant="{{ 'general.req_qty_variant' | t | escape }}"
+  data-t-req-ppl-product="{{ 'general.req_ppl_product' | t | escape }}"
+  data-t-req-ppl-variant="{{ 'general.req_ppl_variant' | t | escape }}"
   data-t-tier-desc="{{ 'general.tier_desc' | t | escape }}"
   data-t-leader-banner="{{ 'general.leader_banner' | t | escape }}"
   data-t-leader-msg="{{ 'general.leader_msg' | t | escape }}"

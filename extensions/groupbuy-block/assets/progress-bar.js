@@ -451,7 +451,19 @@ function renderActiveCampaign(container, data) {
   let descriptionTextHTML = '';
   
   if (maxTier) {
-    const requirementTerm = isQuantity ? (container.dataset.tItemsReq || 'items or more are bought') : (container.dataset.tPeopleReq || 'people or more join the group buy');
+    const scope = container.dataset.scope || 'PRODUCT';
+    let requirementTerm = '';
+
+    if (isQuantity) {
+      requirementTerm = scope === 'PRODUCT' 
+        ? (container.dataset.tReqQtyProduct || 'items (any option) are bought') 
+        : (container.dataset.tReqQtyVariant || 'items (this specific option only) are bought');
+    } else {
+      requirementTerm = scope === 'PRODUCT' 
+        ? (container.dataset.tReqPplProduct || 'people join the group buy (any option)') 
+        : (container.dataset.tReqPplVariant || 'people join the group buy (this specific option only)');
+    }
+
     const tierTemplate = container.dataset.tTierDesc || 'When {quantity} {req}, you will get {discount}% off!';
     const dynamicDesc = tierTemplate.replace('{quantity}', maxTier.quantity).replace('{req}', requirementTerm).replace('{discount}', maxTier.discount);
     
@@ -608,7 +620,19 @@ function renderScheduledCampaign(container, campaign) {
   
   let descriptionTextHTML = '';
   if (maxTier) {
-    const requirementTerm = isQuantity ? (container.dataset.tItemsReq || 'items or more are bought') : (container.dataset.tPeopleReq || 'people or more join the group buy');
+    const scope = container.dataset.scope || 'PRODUCT';
+    let requirementTerm = '';
+
+    if (isQuantity) {
+      requirementTerm = scope === 'PRODUCT' 
+        ? (container.dataset.tReqQtyProduct || 'items (any option) are bought') 
+        : (container.dataset.tReqQtyVariant || 'items (this specific option only) are bought');
+    } else {
+      requirementTerm = scope === 'PRODUCT' 
+        ? (container.dataset.tReqPplProduct || 'people join the group buy (any option)') 
+        : (container.dataset.tReqPplVariant || 'people join the group buy (this specific option only)');
+    }
+
     const tierTemplate = container.dataset.tTierDesc || 'When {quantity} {req}, you will get {discount}% off!';
     const dynamicDesc = tierTemplate.replace('{quantity}', maxTier.quantity).replace('{req}', requirementTerm).replace('{discount}', maxTier.discount);
 
