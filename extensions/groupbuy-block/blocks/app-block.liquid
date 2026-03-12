@@ -31,13 +31,11 @@
   
   /* ✨ LOADING SPINNER & OVERLAY */
   .gb-loading-overlay {
-    position: absolute;
-    top: 0; left: 0; right: 0; bottom: 0;
+    position: absolute; top: 0; left: 0; right: 0; bottom: 0;
     background: rgba(255, 255, 255, 0.7);
     backdrop-filter: blur(2px);
     -webkit-backdrop-filter: blur(2px);
-    display: flex;
-    flex-direction: column;
+    display: flex; flex-direction: column;
     align-items: center;
     justify-content: center;
     z-index: 10;
@@ -117,8 +115,42 @@
     --gb-scheduled-border: {% if block.settings.show_scheduled_border %}{{ block.settings.scheduled_border_width }}px solid {{ block.settings.scheduled_border_color }}{% else %}none{% endif %};
     display: block;
   "
-  data-title-text="{{ block.settings.title_text | escape }}"
-  data-not-included-text="{{ block.settings.not_included_text | escape }}"
+  data-title-text="{{ 'general.title_active' | t | escape }}"
+  data-not-included-text="{{ 'general.not_included' | t | escape }}"
+  data-t-title-scheduled="{{ 'general.title_scheduled' | t | escape }}"
+  data-t-title-ended="{{ 'general.title_ended' | t | escape }}"
+  data-t-desc-ended="{{ 'general.desc_ended' | t | escape }}"
+  data-t-starts-in="{{ 'general.starts_in' | t | escape }}"
+  data-t-ends-in="{{ 'general.ends_in' | t | escape }}"
+  data-t-deal-expired="{{ 'general.deal_expired' | t | escape }}"
+  data-t-progress="{{ 'general.progress' | t | escape }}"
+  data-t-quantity="{{ 'general.quantity' | t | escape }}"
+  data-t-days="{{ 'general.days' | t | escape }}"
+  data-t-hours="{{ 'general.hours' | t | escape }}"
+  data-t-minutes="{{ 'general.minutes' | t | escape }}"
+  data-t-seconds="{{ 'general.seconds' | t | escape }}"
+  data-t-off="{{ 'general.off' | t | escape }}"
+  data-t-only="{{ 'general.only' | t | escape }}"
+  data-t-items-sold="{{ 'general.items_sold' | t | escape }}"
+  data-t-participants="{{ 'general.participants' | t | escape }}"
+  data-t-items-count="{{ 'general.items_count' | t | escape }}"
+  data-t-people-count="{{ 'general.people_count' | t | escape }}"
+  data-t-items-req="{{ 'general.items_req' | t | escape }}"
+  data-t-people-req="{{ 'general.people_req' | t | escape }}"
+  data-t-tier-desc="{{ 'general.tier_desc' | t | escape }}"
+  data-t-leader-banner="{{ 'general.leader_banner' | t | escape }}"
+  data-t-leader-msg="{{ 'general.leader_msg' | t | escape }}"
+  data-t-join="{{ 'general.join_button' | t | escape }}"
+  data-t-joining="{{ 'general.joining' | t | escape }}"
+  data-t-checking-out="{{ 'general.checking_out' | t | escape }}"
+  data-t-success="{{ 'general.success' | t | escape }}"
+  data-t-buy-again="{{ 'general.buy_again' | t | escape }}"
+  data-t-buy-another="{{ 'general.buy_another' | t | escape }}"
+  data-t-login="{{ 'general.login_to_join' | t | escape }}"
+  data-t-msg-joined="{{ 'general.msg_already_joined' | t | escape }}"
+  data-t-msg-welcome="{{ 'general.msg_welcome_back' | t | escape }}"
+  data-t-msg-sync="{{ 'general.msg_sync_note' | t | escape }}"
+  data-t-err-plan="{{ 'general.error_no_plan' | t | escape }}"
   data-badge-format="{{ block.settings.badge_format }}"
   data-progress-format="{{ block.settings.progress_format }}"
   data-clock-layout="{{ block.settings.clock_layout }}"
@@ -160,22 +192,10 @@
         "default": "ACTIVE"
       },
       {
-        "type": "text",
-        "id": "not_included_text",
-        "label": "Text when Variant is Not Included",
-        "default": "This variant is not included in the current group buy."
-      },
-      {
         "type": "checkbox",
         "id": "show_title",
         "label": "Show Title",
         "default": true
-      },
-      {
-        "type": "text",
-        "id": "title_text",
-        "label": "Custom Title Text",
-        "default": "Unlock Group Discounts"
       },
       {
         "type": "range",

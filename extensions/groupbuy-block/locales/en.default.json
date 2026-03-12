@@ -1,10 +1,40 @@
 {
-  "ratings": {
-    "stars": {
-      "label": "Ratings"
-    },
-    "home": {
-      "recommendationText": "Recommended Product!"
-    }
+  "general": {
+    "title_active": "Unlock Group Discounts",
+    "title_scheduled": "🔥 A Group Buy is starting soon!",
+    "title_ended": "Group Buy Ended",
+    "desc_ended": "This group buy has officially ended. Stay tuned for the next one!",
+    "not_included": "This variant is not included in the current group buy.",
+    "starts_in": "Starts in:",
+    "ends_in": "Ends in:",
+    "deal_expired": "Deal Expired",
+    "progress": "Progress",
+    "quantity": "Quantity",
+    "days": "Days",
+    "hours": "Hours",
+    "minutes": "Minutes",
+    "seconds": "Seconds",
+    "off": "% off",
+    "only": "Only",
+    "items_sold": "Items Sold",
+    "participants": "Participants",
+    "items_count": "items",
+    "people_count": "people",
+    "items_req": "items or more are bought",
+    "people_req": "people or more join the group buy",
+    "tier_desc": "When {quantity} {req}, you will get {discount}% off!",
+    "leader_banner": "👑 Group Leader Bonus: The first buyer gets {discount}!",
+    "leader_msg": "👑 You are the Group Leader! {discount} secured.",
+    "join_button": "Join Group Buy",
+    "joining": "Joining...",
+    "checking_out": "Checking Out...",
+    "success": "Success!",
+    "buy_again": "Buy Again",
+    "buy_another": "Buy Another",
+    "login_to_join": "Login or Create Account to Join",
+    "msg_already_joined": "You've already joined this group buy! Your new purchase will get the discount, but won't count as a new participant.",
+    "msg_welcome_back": "Welcome back! Every item you buy helps reach the goal.",
+    "msg_sync_note": "*Note: The progress bar may take a minute to fully sync with our servers.",
+    "error_no_plan": "Error: No Selling Plan Found"
   }
 }
