@@ -53,11 +53,11 @@
       "displayTimeIn": "顯示時間",
       "startTime": "轉換後的開始時間",
       "endTime": "轉換後的結束時間",
-      "discountTiers": "折扣層級",
+      "discountTiers": "折扣級別",
       "items": "件商品",
       "buyers": "位買家",
       "off": "折扣",
-      "noTiers": "尚未設定層級。"
+      "noTiers": "尚未設定級別。"
     },
     "deleteModal": {
       "title": "刪除此活動？",
@@ -85,6 +85,55 @@
     "paginationLabel": "第 {{page}} 頁，共 {{totalPages}} 頁",
     "messages": {
       "deleteSuccess": "活動已成功刪除。"
+    }
+  },
+  "CreateCampaign": {
+    "title": "建立團購活動",
+    "back": "捨棄",
+    "save": "建立活動",
+    "saving": "建立中...",
+    "sections": {
+      "product": {
+        "title": "產品與範圍",
+        "description": "選擇此活動的產品及顏色。",
+        "selectBtn": "瀏覽產品",
+        "changeBtn": "變更產品",
+        "scopeLabel": "活動計算範圍",
+        "scopeProduct": "整個產品 (所有顏色)",
+        "scopeVariant": "僅限特定顏色",
+        "selectedVariants": "已選擇 {{count}} 個顏色",
+        "noProduct": "尚未選擇產品"
+      },
+      "schedule": {
+        "title": "排程與時區",
+        "description": "設定團購的開始與結束時間。",
+        "timezone": "時區",
+        "startDate": "開始日期與時間",
+        "endDate": "結束日期與時間"
+      },
+      "tiers": {
+        "title": "折扣級別",
+        "description": "定義數量折扣。級別必須依數量遞增排序。",
+        "countingMethod": "進度計算方式",
+        "countItems": "售出商品總數",
+        "countBuyers": "買家總數",
+        "addTier": "新增級別",
+        "tierTarget": "目標 (件數/買家)",
+        "tierDiscount": "折扣 (%)",
+        "remove": "移除"
+      }
+    },
+    "errors": {
+      "noProduct": "請選擇一個產品。",
+      "noVariants": "請至少選擇一個顏色。",
+      "invalidDates": "結束日期必須晚於開始日期。",
+      "pastDates": "開始日期不能在過去。",
+      "noTiers": "請至少新增一個折扣級別。",
+      "invalidTiers": "請正確填寫所有級別欄位。",
+      "tierOrder": "級別數量必須遞增排列。"
+    },
+    "messages": {
+      "success": "活動建立成功！"
     }
   }
 }

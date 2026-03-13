@@ -39,6 +39,7 @@ export const CampaignForm = forwardRef(({
   formErrors = {},
   onDirtyChange = () => { },
   onValidityChange = () => { },
+  translations = {} // ✨ Inject translations prop
 }, ref) => {
   const formRef = useRef(null);
   const hasUserInteracted = useRef(false);
@@ -85,7 +86,6 @@ export const CampaignForm = forwardRef(({
   }, []);
 
   useEffect(() => {
-    // This effect's only job is to flip the initial mount flag after the first render is stable.
     const timer = setTimeout(() => {
       isInitialMount.current = false;
     }, 50);
@@ -95,8 +95,6 @@ export const CampaignForm = forwardRef(({
   useEffect(() => {
     const now = new Date();
     const newMinStartTime = new Date(now.getTime());
-    
-    // ✅ NEW MATH: Round up to the next 10-minute block
     const currentMinutes = newMinStartTime.getMinutes();
     const remainder = currentMinutes % 10;
     newMinStartTime.setMinutes(currentMinutes + (10 - remainder), 0, 0);
@@ -109,7 +107,6 @@ export const CampaignForm = forwardRef(({
 
     if (!startDate) {
       let startTime = new Date();
-      
       const currentMinutes = startTime.getMinutes();
       const remainder = currentMinutes % 10;
       startTime.setMinutes(currentMinutes + (10 - remainder), 0, 0);
@@ -297,21 +294,13 @@ export const CampaignForm = forwardRef(({
   const handleLeaderDiscountToggle = (event) => {
     const isChecked = event.currentTarget.checked;
     setLeaderDiscountEnabled(isChecked);
-    
-    // Turn off Fake Count, but DON'T erase the number they typed
-    if (isChecked) {
-      setStartingParticipantsEnabled(false);
-    }
+    if (isChecked) setStartingParticipantsEnabled(false);
   };
 
   const handleStartingParticipantsToggle = (event) => {
     const isChecked = event.currentTarget.checked;
     setStartingParticipantsEnabled(isChecked);
-    
-    // Turn off Leader Discount, but DON'T erase the number they typed
-    if (isChecked) {
-      setLeaderDiscountEnabled(false);
-    }
+    if (isChecked) setLeaderDiscountEnabled(false);
   };
 
   const handleLeaderDiscountChange = (value) => {
@@ -321,39 +310,32 @@ export const CampaignForm = forwardRef(({
     onValueChange(setLeaderDiscount)(numericValue.toString());
   };
 
-  const tierLabel = countingMethod === 'PARTICIPANT' ? 'Min. participants' : 'Min. items sold';
-  const startingCountLabel = countingMethod === 'PARTICIPANT' ? 'Starting participants (fake count)' : 'Starting items sold (fake count)';
-  const startingCountDetails = countingMethod === 'PARTICIPANT' ? 'Sets a starting number of participants to make the group buy look more popular' : 'Sets a starting number of items sold to make the group buy look more popular';
+  useEffect(() => {
+    setTimeout(() => {
+      if (leaderDiscountSwitchRef.current) leaderDiscountSwitchRef.current.checked = leaderDiscountEnabled;
+    }, 0);
+  }, [leaderDiscountEnabled]);
 
-  // Effect 1: Manages ONLY the 'checked' state for the Leader Discount Switch
-useEffect(() => {
-  // We only need to defer setting the 'checked' property to prevent the race condition.
-  setTimeout(() => {
-    if (leaderDiscountSwitchRef.current) {
-      leaderDiscountSwitchRef.current.checked = leaderDiscountEnabled;
-    }
-  }, 0);
-}, [leaderDiscountEnabled]); // Note: The dependency array is simpler now.
-
-// Effect 2: Manages ONLY the 'checked' state for the Starting Participants Switch
-useEffect(() => {
-  // We only need to defer setting the 'checked' property to prevent the race condition.
-  setTimeout(() => {
-    if (startingParticipantsSwitchRef.current) {
-      startingParticipantsSwitchRef.current.checked = startingParticipantsEnabled;
-    }
-  }, 0);
-}, [startingParticipantsEnabled]); // Note: The dependency array is simpler now.
+  useEffect(() => {
+    setTimeout(() => {
+      if (startingParticipantsSwitchRef.current) startingParticipantsSwitchRef.current.checked = startingParticipantsEnabled;
+    }, 0);
+  }, [startingParticipantsEnabled]);
 
   const pickerError = formErrors?.product || clientPickerError;
-
   const isEditing = !!initialData.id;
 
-  const cardTitle = isEditing ? "Manage Your Campaign" : "Set Up Your Campaign";
+  // ✨ Helper strings mapping directly to translations
+  const tierLabel = countingMethod === 'PARTICIPANT' 
+    ? (translations?.sections?.tiers?.countBuyers || 'Min. participants') 
+    : (translations?.sections?.tiers?.countItems || 'Min. items sold');
+
+  const cardTitle = isEditing ? "Manage Your Campaign" : (translations?.title || "Set Up Your Campaign");
+  
   const createListItems = [
-    "Set the product to be featured in the group buy.",
-    "Define discount tiers based on participants or items sold.",
-    "Schedule the start and end times for your campaign.",
+    translations?.sections?.product?.description || "Select the product and variants for this campaign.",
+    translations?.sections?.tiers?.description || "Define the volume discounts. Tiers must be in ascending order.",
+    translations?.sections?.schedule?.description || "Set when your group buy starts and ends.",
     "Note: The product and campaign type will be locked after creation."
   ];
 
@@ -366,7 +348,6 @@ useEffect(() => {
   return (
     <Form method="post" id="campaign-form" ref={formRef} replace>
       <BlockStack gap="500">
-        {/* ✅ STEP 3: Add the new descriptive card at the top. */}
         <Card>
           <BlockStack gap="200">
             <Text as="h2" variant="headingMd">
@@ -384,7 +365,7 @@ useEffect(() => {
           <BlockStack gap="500">
             <Card>
               <BlockStack gap="400">
-                <Text as="h2" variant="headingMd">Product(s)</Text>
+                <Text as="h2" variant="headingMd">{translations?.sections?.product?.title || "Product & Scope"}</Text>
                 {productFetcher.state === 'loading' && (
                   <BlockStack inlineAlign="center">
                     <Spinner size="small" />
@@ -407,7 +388,7 @@ useEffect(() => {
                         {
                           content: <Icon source={DeleteIcon} tone="critical" />,
                           variant: 'plain',
-                          accessibilityLabel: `Remove ${variantTitle} from list`,
+                          accessibilityLabel: `Remove ${variantTitle}`,
                           onAction: () => handleRemoveVariant(variantId),
                         },
                       ];
@@ -430,13 +411,13 @@ useEffect(() => {
                 )}
                 {selectedProducts.length > 0 && (
                   <Button variant="plain" tone="critical" onClick={() => onValueChange(setSelectedProducts)([])} disabled={!!initialData.id}>
-                    Remove all
+                    {translations?.sections?.tiers?.remove || "Remove all"}
                   </Button>
                 )}
                 {!selectedProducts.length && productFetcher.state !== 'loading' && (
                   <BlockStack gap="200">
                     <Button onClick={handleProductSelection} disabled={!!initialData.id}>
-                      Select product(s)
+                      {translations?.sections?.product?.selectBtn || "Browse Products"}
                     </Button>
                     <Text as="p" tone="subdued">
                       You can only select variants from a single product for each campaign.
@@ -448,60 +429,49 @@ useEffect(() => {
             </Card>
             <Card>
               <BlockStack gap="500">
-                <Text as="h2" variant="headingMd">Campaign Type</Text>
+                <Text as="h2" variant="headingMd">{translations?.sections?.product?.scopeLabel || "Campaign Scope"}</Text>
                 <BlockStack gap="200">
-                  <Text as="p" variant="bodyMd" fontWeight="semibold">Campaign Scope</Text>
                   <ButtonGroup variant="segmented">
                     <Button
                       pressed={scope === 'PRODUCT'}
                       onClick={() => onValueChange(setScope)('PRODUCT')}
                       disabled={!!initialData.id && scope !== 'PRODUCT'} 
                     >
-                      Product-wide
+                      {translations?.sections?.product?.scopeProduct || "Product-wide"}
                     </Button>
                     <Button
                       pressed={scope === 'VARIANT'}
                       onClick={() => onValueChange(setScope)('VARIANT')}
                       disabled={!!initialData.id && scope !== 'VARIANT'}
                     >
-                      Per-Variant
+                      {translations?.sections?.product?.scopeVariant || "Per-Variant"}
                     </Button>
                   </ButtonGroup>
-                  <Text as="p" tone="subdued">
-                    {scope === 'PRODUCT'
-                      ? 'All variants of this product contribute to one shared goal.'
-                      : 'Each variant will have its own separate goal and progress.'}
-                  </Text>
                 </BlockStack>
                 <BlockStack gap="200">
-                  <Text as="p" variant="bodyMd" fontWeight="semibold">Counting Method</Text>
+                  <Text as="p" variant="bodyMd" fontWeight="semibold">{translations?.sections?.tiers?.countingMethod || "Counting Method"}</Text>
                   <ButtonGroup variant="segmented">
                     <Button
                       pressed={countingMethod === 'PARTICIPANT'}
                       onClick={() => onValueChange(setCountingMethod)('PARTICIPANT')}
                       disabled={!!initialData.id && countingMethod !== 'PARTICIPANT'}
                     >
-                      By Participants
+                      {translations?.sections?.tiers?.countBuyers || "By Participants"}
                     </Button>
                     <Button
                       pressed={countingMethod === 'ITEM_QUANTITY'}
                       onClick={() => onValueChange(setCountingMethod)('ITEM_QUANTITY')}
                       disabled={!!initialData.id && countingMethod !== 'ITEM_QUANTITY'}
                     >
-                      By Item Quantity
+                      {translations?.sections?.tiers?.countItems || "By Item Quantity"}
                     </Button>
                   </ButtonGroup>
-                  <Text as="p" tone="subdued">
-                    {countingMethod === 'PARTICIPANT'
-                      ? 'Progress is measured by the number of unique customers who join.'
-                      : 'Progress is measured by the total number of items sold.'}
-                  </Text>
                 </BlockStack>
               </BlockStack>
             </Card>
             <Card>
               <BlockStack gap="400">
-                <Text as="h2" variant="headingMd">Group Tiers</Text>
+                <Text as="h2" variant="headingMd">{translations?.sections?.tiers?.title || "Discount Tiers"}</Text>
                 <FormLayout>
                   {tiers.map((tier, index) => (
                     <FormLayout.Group key={index}>
@@ -509,12 +479,12 @@ useEffect(() => {
                         value={tier.quantity}
                         onChange={(v) => handleTierChange(index, 'quantity', v)}
                         disabled={isStarted || hasParticipants} error={tierErrors[index]?.quantity} autoComplete="off" />
-                      <TextField label="Discount (%)" value={tier.discount} onChange={(v) => handleTierChange(index, 'discount', v)} disabled={isStarted || hasParticipants} error={tierErrors[index]?.discount} autoComplete="off" />
+                      <TextField label={translations?.sections?.tiers?.tierDiscount || "Discount (%)"} value={tier.discount} onChange={(v) => handleTierChange(index, 'discount', v)} disabled={isStarted || hasParticipants} error={tierErrors[index]?.discount} autoComplete="off" />
                       <div style={{ marginTop: '10px' }}><Button icon={DeleteIcon} onClick={() => handleRemoveTier(index)} disabled={tiers.length === 1 || hasParticipants} accessibilityLabel={`Remove Tier ${index + 1}`} /></div>
                     </FormLayout.Group>
                   ))}
                 </FormLayout>
-                <Button onClick={handleAddTier} icon={PlusIcon} disabled={isStarted || hasParticipants}>Add Tier</Button>
+                <Button onClick={handleAddTier} icon={PlusIcon} disabled={isStarted || hasParticipants}>{translations?.sections?.tiers?.addTier || "Add Tier"}</Button>
               </BlockStack>
             </Card>
           </BlockStack>
@@ -523,13 +493,13 @@ useEffect(() => {
           <BlockStack gap="500">
             <Card>
               <BlockStack gap="400">
-                <Text as="h2" variant="headingMd">Scheduling</Text>
+                <Text as="h2" variant="headingMd">{translations?.sections?.schedule?.title || "Scheduling"}</Text>
                 <Autocomplete options={filteredTimezoneOptions} selected={[timezone]} onSelect={handleSelectTimezone} disabled={isStarted}
-                  textField={<Autocomplete.TextField onChange={handleTimezoneInputChange} label="Campaign's Target Timezone" value={timezoneInputValue} placeholder="Search for a timezone" autoComplete="off" disabled={isStarted} />}
+                  textField={<Autocomplete.TextField onChange={handleTimezoneInputChange} label={translations?.sections?.schedule?.timezone || "Timezone"} value={timezoneInputValue} placeholder="Search for a timezone" autoComplete="off" disabled={isStarted} />}
                 />
                 <Text as="p" tone="subdued" alignment="center">Current time in {timezone.replace(/_/g, ' ')} is{' '}<strong>{formatInTimeZone(liveTime, timezone, 'MMM d, yyyy, HH:mm:ss')}</strong>.</Text>
                 <DateTimePicker
-                  label="Start Date"
+                  label={translations?.sections?.schedule?.startDate || "Start Date"}
                   timezone={timezone}
                   selectedDateTime={startDate}
                   onDateTimeChange={onValueChange(setStartDate)}
@@ -539,7 +509,7 @@ useEffect(() => {
                   error={formErrors?.schedule?.startDate}
                 />
                 <DateTimePicker
-                  label="End Date"
+                  label={translations?.sections?.schedule?.endDate || "End Date"}
                   timezone={timezone}
                   selectedDateTime={endDate}
                   onDateTimeChange={onValueChange(setEndDate)}
@@ -553,7 +523,6 @@ useEffect(() => {
             <Card>
               <BlockStack gap="400">
                 <Text as="h2" variant="headingMd">Features</Text>
-                {/* ✅ NEW: Helper text explaining the mutually exclusive behavior */}
                 <Text as="p" tone="subdued">
                   Note: Leader Discount and Fake Count cannot be used simultaneously. Enabling one will automatically turn off the other.
                 </Text>
@@ -573,8 +542,8 @@ useEffect(() => {
                 />
                 <s-switch
                   ref={startingParticipantsSwitchRef}
-                  label={startingCountLabel}
-                  details={startingCountDetails}
+                  label="Starting count (fake count)"
+                  details="Sets a starting number to make the group buy look more popular"
                   onInput={handleStartingParticipantsToggle}
                   disabled={isStarted || hasParticipants}
                 ></s-switch>
@@ -606,7 +575,6 @@ useEffect(() => {
       <input type="hidden" name="endDate" value={endDate || ''} />
       <input type="hidden" name="timezone" value={timezone} />
       <input type="hidden" name="tiers" value={JSON.stringify(tiers)} />
-      {/* ✅ If the switch is off, force it to send '0' to protect the backend! */}
       <input 
         type="hidden" 
         name="startingParticipants" 

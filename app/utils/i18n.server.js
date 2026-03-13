@@ -9,7 +9,7 @@ export const localeCookie = createCookie("shop_locale", {
   path: "/",
   httpOnly: true,
   secure: true,
-  sameSite: "lax",
+  sameSite: "none",
   maxAge: 31536000, // Remembers the language for 1 year
 });
 

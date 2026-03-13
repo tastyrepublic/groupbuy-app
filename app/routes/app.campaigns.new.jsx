@@ -1,5 +1,5 @@
 import { json, redirect } from "@remix-run/node";
-import { useSubmit, useNavigation, useActionData, useNavigate, useBlocker } from "@remix-run/react";
+import { useSubmit, useNavigation, useActionData, useNavigate, useBlocker, useLoaderData } from "@remix-run/react";
 import { useAppBridge, SaveBar } from "@shopify/app-bridge-react";
 import { Page, Layout } from "@shopify/polaris";
 import { useState, useEffect, useRef, useCallback } from "react";
@@ -9,6 +9,24 @@ import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { validateTiers } from "../components/validation";
 import { toggleContinueSelling } from "../utils/inventory.server.js";
+
+import { getI18n } from "../utils/i18n.server.js";
+
+// ✨ 1. Update the loader to grab the whole dictionary object
+export const loader = async ({ request }) => {
+  await authenticate.admin(request);
+  const { t } = await getI18n(request);
+
+  return json({
+    translations: {
+      title: t("CreateCampaign.title", "Create Group Buy Campaign"),
+      discard: t("CreateCampaign.back", "Discard"),
+      save: t("CreateCampaign.save", "Create Campaign"),
+      campaignsLabel: t("Dashboard.title", "Group Buy Campaigns"),
+      form: t("CreateCampaign", { returnObjects: true }) 
+    }
+  });
+};
 
 // --- ACTION (No changes needed) ---
 export const action = async ({ request }) => {
@@ -59,7 +77,6 @@ export const action = async ({ request }) => {
   }
 
   try {
-    // ✅ FIX 1: Add $resources to the mutation definition
     const sellingPlanMutation = `
       mutation sellingPlanGroupCreate($input: SellingPlanGroupInput!, $resources: SellingPlanGroupResourceInput) {
         sellingPlanGroupCreate(input: $input, resources: $resources) {
@@ -84,26 +101,23 @@ export const action = async ({ request }) => {
     const sellingPlanInput = {
       name: "Group Buy Special Offer", 
       merchantCode: `GB-${Date.now()}`,
-      options: ["Discount Tier"], // This is the label for the individual option
+      options: ["Discount Tier"], 
       position: 1,
       sellingPlansToCreate: [
         {
-          name: "Join Group Buy (Pay $0 Today)", // This is the label for the radio button itself
+          name: "Join Group Buy (Pay $0 Today)", 
           options: ["Join Group Buy"],
           position: 1,
-          // ✅ FIX 1: Explicitly declare this as a Pre-Order
           category: "PRE_ORDER", 
           billingPolicy: {
             fixed: { 
               checkoutCharge: { type: "PERCENTAGE", value: { percentage: 0 } },
-              // ✅ FIX 2: Define when the vaulted card should be charged
               remainingBalanceChargeTrigger: "EXACT_TIME",
               remainingBalanceChargeExactTime: endDateTimeUtc.toISOString()
             } 
           },
           deliveryPolicy: {
             fixed: { 
-              // ✅ FIX 3: Define when the item will be fulfilled
               fulfillmentTrigger: "EXACT_TIME",
               fulfillmentExactTime: endDateTimeUtc.toISOString() 
             } 
@@ -117,13 +131,11 @@ export const action = async ({ request }) => {
       ]
     };
 
-    // ✅ FIX 2: Separate the resources from the input object
     const sellingPlanResources = {
       productIds: [productId],
       productVariantIds: selectedVariantIds
     };
 
-    // ✅ FIX 3: Pass both input AND resources into the variables
     const spResponse = await admin.graphql(sellingPlanMutation, { 
       variables: { 
         input: sellingPlanInput,
@@ -138,11 +150,9 @@ export const action = async ({ request }) => {
       throw new Error("Failed to create Shopify Selling Plan");
     }
 
-    // ✅ CAPTURE BOTH IDs
     const generatedSellingPlanGroupId = spData.data.sellingPlanGroupCreate.sellingPlanGroup.id;
     const generatedSellingPlanId = spData.data.sellingPlanGroupCreate.sellingPlanGroup.sellingPlans.edges[0].node.id;
 
-    // ✅ SAVE BOTH TO NEONDB
     const newCampaign = await db.campaign.create({
       data: {
         shop: session.shop,
@@ -176,12 +186,15 @@ export const action = async ({ request }) => {
 };
 
 export default function NewCampaignPage() {
-  const submit = useSubmit();
+  // ✨ 3. Call useLoaderData to access the translated strings
+  const { translations } = useLoaderData();
+
+  const submit = useSubmit();
   const navigation = useNavigation();
-  const actionData = useActionData();
-  const navigate = useNavigate();
-  const campaignFormRef = useRef(null);
-  const app = useAppBridge();
+  const actionData = useActionData();
+  const navigate = useNavigate();
+  const campaignFormRef = useRef(null);
+  const app = useAppBridge();
 
   const [isDirty, setIsDirty] = useState(false);
   const [isFormValid, setIsFormValid] = useState(false);
@@ -209,8 +222,8 @@ export default function NewCampaignPage() {
   }, []);
   
   const handleSave = () => {
-  campaignFormRef.current?.submit(); // Directly call the .submit() method
-};
+    campaignFormRef.current?.submit(); 
+  };
 
   const handleDiscard = () => { 
     campaignFormRef.current?.discard(); 
@@ -226,13 +239,12 @@ export default function NewCampaignPage() {
         .then((confirmed) => confirmed ? blocker.proceed() : blocker.reset());
     }
   }, [blocker, app]);
-  
-  return (
+  
+  return (
     <Page
-      title="Create campaign"
-      backAction={{ content: 'Campaigns', onAction: handleBackAction }}
+      title={translations.title}
+      backAction={{ content: translations.campaignsLabel, onAction: handleBackAction }}
     >
-      {/* ✅ This is the final, correct way to use the SaveBar based on your documentation. */}
       <SaveBar id="campaign-save-bar">
         <button 
           variant="primary" 
@@ -240,10 +252,10 @@ export default function NewCampaignPage() {
           loading={isBusy ? "" : undefined}
           disabled={!isFormValid || isBusy}
         >
-          Save
+          {translations.save} {/* ✨ Translated Save Button */}
         </button>
         <button onClick={handleDiscard}>
-          Discard
+          {translations.discard} {/* ✨ Translated Discard Button */}
         </button>
       </SaveBar>
 
@@ -256,6 +268,7 @@ export default function NewCampaignPage() {
             isStarted={false}
             hasParticipants={false}
             formErrors={actionData?.errors}
+            translations={translations.form}
           />
         </Layout.Section>
       </Layout>

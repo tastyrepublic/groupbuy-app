@@ -86,5 +86,54 @@
     "messages": {
       "deleteSuccess": "Campaign deleted successfully."
     }
+  },
+  "CreateCampaign": {
+    "title": "Create Group Buy Campaign",
+    "back": "Discard",
+    "save": "Create Campaign",
+    "saving": "Creating...",
+    "sections": {
+      "product": {
+        "title": "Product & Scope",
+        "description": "Select the product and variants for this campaign.",
+        "selectBtn": "Browse Products",
+        "changeBtn": "Change Product",
+        "scopeLabel": "Campaign Scope",
+        "scopeProduct": "Entire Product (All Variants)",
+        "scopeVariant": "Specific Variants Only",
+        "selectedVariants": "{{count}} variants selected",
+        "noProduct": "No product selected"
+      },
+      "schedule": {
+        "title": "Schedule & Timezone",
+        "description": "Set when your group buy starts and ends.",
+        "timezone": "Timezone",
+        "startDate": "Start Date & Time",
+        "endDate": "End Date & Time"
+      },
+      "tiers": {
+        "title": "Discount Tiers",
+        "description": "Define the volume discounts. Tiers must be in ascending order of quantity.",
+        "countingMethod": "How should progress be counted?",
+        "countItems": "Total Items Sold",
+        "countBuyers": "Total Unique Buyers",
+        "addTier": "Add Tier",
+        "tierTarget": "Target (Items/Buyers)",
+        "tierDiscount": "Discount (%)",
+        "remove": "Remove"
+      }
+    },
+    "errors": {
+      "noProduct": "Please select a product.",
+      "noVariants": "Please select at least one variant.",
+      "invalidDates": "End date must be after start date.",
+      "pastDates": "Start date cannot be in the past.",
+      "noTiers": "Please add at least one discount tier.",
+      "invalidTiers": "Please fill out all tier fields correctly.",
+      "tierOrder": "Tiers must be in ascending order."
+    },
+    "messages": {
+      "success": "Campaign created successfully!"
+    }
   }
 }
