@@ -198,7 +198,7 @@ const getDisplayStatus = (campaign) => {
 
 function CampaignRow({ campaign, index, primaryDomainUrl, deleteFetcher }) {
   const [open, setOpen] = useState(false);
-  const [displayTimezone, setDisplayTimezone] = useState('Europe/London');
+  const [displayTimezone, setDisplayTimezone] = useState(campaign.timezone || 'Europe/London');
   const { smDown } = useBreakpoints(); 
   
   const [popoverActive, setPopoverActive] = useState(false);
@@ -350,17 +350,24 @@ function CampaignRow({ campaign, index, primaryDomainUrl, deleteFetcher }) {
                 <BlockStack gap="400">
                   <DescriptionList
                     items={[
-                      { 
-                        term: 'Campaign Timezone', 
-                        description: (
-                          <InlineStack blockAlign="center" gap="400">
-                            <Text as="span">{campaign.timezone}</Text>
-                            <div style={{ width: '220px' }}>
-                              <Select label="Display Time In" labelHidden options={timezoneOptions} onChange={setDisplayTimezone} value={displayTimezone} />
-                            </div>
-                          </InlineStack>
-                        ) 
-                      },
+                      // Inside the description list items within CampaignRow
+{ 
+  term: 'Campaign Timezone', 
+  description: (
+    <InlineStack blockAlign="center" gap="400">
+      <Text as="span">{campaign.timezone}</Text>
+      <div style={{ width: '220px' }}>
+        <Select 
+          label="Display Time In" 
+          labelHidden 
+          options={timezoneOptions} 
+          onChange={setDisplayTimezone} 
+          value={displayTimezone} // ✨ This now correctly shows the DB value on load
+        />
+      </div>
+    </InlineStack>
+  ) 
+},
                       { term: 'Converted Start Time', description: formatForDisplay(campaign.startDateTime, displayTimezone) },
                       { term: 'Converted End Time', description: formatForDisplay(campaign.endDateTime, displayTimezone) },
                       { 
