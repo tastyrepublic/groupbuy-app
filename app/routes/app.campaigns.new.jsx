@@ -8,6 +8,7 @@ import { CampaignForm } from '../components/CampaignForm';
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { validateTiers } from "../components/validation";
+import { toggleContinueSelling } from "../utils/inventory.server.js";
 
 // --- ACTION (No changes needed) ---
 export const action = async ({ request }) => {
@@ -162,6 +163,8 @@ export const action = async ({ request }) => {
         sellingPlanGroupId: generatedSellingPlanGroupId 
       },
     });
+
+    await toggleContinueSelling(admin, session.shop, newCampaign.productId, newCampaign.id, "START");
 
     return redirect(`/app/campaigns/${newCampaign.id}?success=true`);
 

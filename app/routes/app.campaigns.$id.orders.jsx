@@ -16,7 +16,7 @@ import {
   Box,
   EmptyState
 } from "@shopify/polaris";
-import { StarFilledIcon } from "@shopify/polaris-icons";
+import { StarFilledIcon, ImageIcon } from "@shopify/polaris-icons";
 import { useState } from "react";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
@@ -360,7 +360,7 @@ export default function CampaignOrdersPage() {
               <Box paddingBlockStart="200" paddingBlockEnd="200">
                 <InlineStack blockAlign="center" gap="400" wrap={false}>
                   <Thumbnail 
-                    source={campaign.productImage || ''} 
+                    source={campaign.productImage || ImageIcon} 
                     alt={campaign.productTitle} 
                     size="large"
                   />

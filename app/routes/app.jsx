@@ -24,6 +24,8 @@ export default function App() {
           Home
         </Link>
         <Link to="/app/campaigns/new">Create campaigns</Link>
+        {/* ✨ Add the Settings link here */}
+        <Link to="/app/settings">Settings</Link> 
       </NavMenu>
       
       <Box paddingBlockEnd="1600">

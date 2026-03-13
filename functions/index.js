@@ -283,56 +283,66 @@ async function processParticipants(participants, finalDiscountTier, shop, access
         { id: calculatedOrderId }
       );
 
-      // 5. Find the Vaulted Authorization and Capture the Payment
+      // 5. Find the Vaulted Payment Mandate and Capture the Payment
       const orderJson = await shopifyGraphQL(shop, accessToken,
-        `query getOrderTransactions($id: ID!) {
+        `query getOrderMandate($id: ID!) {
           order(id: $id) {
-            totalPriceSet { shopMoney { amount currencyCode } }
-            transactions(first: 5) { id kind status }
+            paymentCollectionDetails {
+              vaultedPaymentMethods {
+                id
+              }
+            }
           }
         }`,
         { id: participant.orderId }
       );
       
       const orderData = orderJson.data?.order;
-      
-      // Smart Search: Accepts real cards (SUCCESS) and Bogus Gateway (PENDING)
-      const parentTransaction = orderData?.transactions?.find(
-        txn => txn.kind === "AUTHORIZATION" && ["SUCCESS", "PENDING"].includes(txn.status)
-      );
+      const mandateId = orderData?.paymentCollectionDetails?.vaultedPaymentMethods?.[0]?.id;
 
-      const finalPrice = parseFloat(orderData.totalPriceSet.shopMoney.amount);
-      const currency = orderData.totalPriceSet.shopMoney.currencyCode;
-
-      // Construct the capture input dynamically
-      const captureInput = {
-        id: participant.orderId,
-        amount: finalPrice,
-        currency: currency,
-      };
-      
-      // If we found a specific transaction, attach it. Otherwise, let Shopify use the default vault.
-      if (parentTransaction) {
-        captureInput.parentTransactionId = parentTransaction.id;
+      if (!mandateId) {
+        console.error(`     ❌ No vaulted payment method (Mandate) found for order ${participant.orderId}. Cannot capture.`);
+        
+        await shopifyGraphQL(shop, accessToken,
+          `mutation tagsAdd($id: ID!, $tags: [String!]!) {
+            tagsAdd(id: $id, tags: $tags) { userErrors { message } }
+          }`,
+          { id: participant.orderId, tags: ["Error: Payment Failed - No Vaulted Card"] }
+        );
+        continue; // Skip to the next order
       }
 
-      console.log(`     -> Attempting capture for ${finalPrice} ${currency}...`);
+      console.log(`     -> Found Mandate ID: ${mandateId}. Attempting capture...`);
 
+      // Generate a dynamic, unique Idempotency Key using the Order ID and current timestamp
+      const numericOrderId = participant.orderId.split('/').pop();
+      const idempotencyKey = `capture-${numericOrderId}-${Date.now()}`;
+
+      // Run the Mandate Payment Capture (Without amount to bypass Shopify Plus limit)
       const captureResult = await shopifyGraphQL(shop, accessToken,
-        `mutation orderCapture($input: OrderCaptureInput!) {
-          orderCapture(input: $input) { 
-            transaction { id status } 
+        `mutation orderCreateMandatePayment($id: ID!, $mandateId: ID!, $idempotencyKey: String!) {
+          orderCreateMandatePayment(
+            autoCapture: true
+            id: $id
+            mandateId: $mandateId
+            idempotencyKey: $idempotencyKey
+          ) { 
+            job { id } 
             userErrors { field message }
           }
         }`,
-        { input: captureInput }
+        { 
+          id: participant.orderId,
+          mandateId: mandateId,
+          idempotencyKey: idempotencyKey
+        }
       );
 
-      const captureErrors = captureResult.data?.orderCapture?.userErrors;
+      const captureErrors = captureResult.data?.orderCreateMandatePayment?.userErrors;
       if (captureErrors && captureErrors.length > 0) {
         console.error(`     ❌ Capture Failed for ${participant.orderId}:`, captureErrors);
         
-        // ✅ NEW: ADD THE FAILED PAYMENT TAG TO THE ORDER
+        // Add the failed payment tag to the order
         await shopifyGraphQL(shop, accessToken,
           `mutation tagsAdd($id: ID!, $tags: [String!]!) {
             tagsAdd(id: $id, tags: $tags) { userErrors { message } }
@@ -341,7 +351,7 @@ async function processParticipants(participants, finalDiscountTier, shop, access
         );
         
       } else {
-        console.log(`     ✅ Captured successfully for order ${participant.orderId}!`);
+        console.log(`     ✅ Captured successfully for order ${participant.orderId}! Job ID: ${captureResult.data.orderCreateMandatePayment.job.id}`);
         
         // Remove the warning tag and add a success tag!
         await shopifyGraphQL(shop, accessToken,
@@ -433,6 +443,87 @@ async function deleteSellingPlanGroup(sellingPlanId, shop, accessToken) {
     }
   } catch (error) {
     console.error(`     ❌ API Error during Selling Plan deletion:`, error.message);
+  }
+}
+
+// --- HELPER 4: Revert Inventory Policy (The Automation) ---
+async function revertInventoryPolicy(campaign, shop, accessToken) {
+  console.log(`   - 📦 Checking inventory automation for campaign ${campaign.id}...`);
+  try {
+    // 1. Check user settings
+    const settings = await prisma.settings.findUnique({ where: { shop } });
+    const autoTurnOff = settings ? settings.disableContinueSellingOnEnd : true;
+
+    if (!autoTurnOff) {
+      console.log(`     -> Inventory automation disabled in settings. Skipping.`);
+      return;
+    }
+
+    if (!campaign.originalInventoryState) {
+      console.log(`     -> No memory bank found for this campaign. Skipping.`);
+      return;
+    }
+
+    const snapshot = JSON.parse(campaign.originalInventoryState);
+
+    // 2. Fetch the current variants from Shopify
+    const getVariantsQuery = `
+      query getVariants($id: ID!) {
+        product(id: $id) {
+          variants(first: 100) {
+            nodes {
+              id
+              inventoryPolicy
+            }
+          }
+        }
+      }
+    `;
+
+    const response = await shopifyGraphQL(shop, accessToken, getVariantsQuery, { id: campaign.productId });
+    const variants = response.data?.product?.variants?.nodes;
+
+    if (!variants || variants.length === 0) return;
+
+    // 3. Compare current state to memory
+    const variantsToUpdate = snapshot.filter(saved => {
+      const currentVariant = variants.find(v => v.id === saved.id);
+      return currentVariant && currentVariant.inventoryPolicy !== saved.policy;
+    }).map(saved => ({ id: saved.id, inventoryPolicy: saved.policy }));
+
+    // 4. Run the Bulk Update
+    if (variantsToUpdate.length === 0) {
+      console.log(`     ⚡ No inventory updates needed. Variants already match memory.`);
+    } else {
+      const updateMutation = `
+        mutation productVariantsBulkUpdate($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
+          productVariantsBulkUpdate(productId: $productId, variants: $variants) {
+            userErrors { field message }
+          }
+        }
+      `;
+
+      const updateResponse = await shopifyGraphQL(shop, accessToken, updateMutation, {
+        productId: campaign.productId,
+        variants: variantsToUpdate
+      });
+
+      if (updateResponse.data?.productVariantsBulkUpdate?.userErrors?.length > 0) {
+        console.error("     ❌ Failed to revert inventory policy:", updateResponse.data.productVariantsBulkUpdate.userErrors);
+      } else {
+        console.log(`     ✅ Successfully reverted ${variantsToUpdate.length} variants to their original state!`);
+      }
+    }
+
+    // 5. DATA CLEANUP: Wipe the memory bank to save space and prevent double-runs
+    await prisma.campaign.update({
+      where: { id: campaign.id },
+      data: { originalInventoryState: null }
+    });
+    console.log("     🧹 Cleaned up inventory memory bank from the database.");
+
+  } catch (error) {
+    console.error(`     ❌ Error during inventory reversion:`, error.message);
   }
 }
 
@@ -559,10 +650,12 @@ exports.campaignFinalizer = onSchedule("every 5 minutes", async (event) => {
       }
 
       // ✅ NEW: SECURE THE PRODUCT BY DELETING THE SELLING PLAN
-      // (Assuming your campaign model stores the ID as 'sellingPlanId')
       if (campaign.sellingPlanGroupId) {
          await deleteSellingPlanGroup(campaign.sellingPlanGroupId, campaign.shop, session.accessToken);
       }
+
+      // ✨ NEW: REVERT THE INVENTORY POLICY
+      await revertInventoryPolicy(campaign, campaign.shop, session.accessToken);
 
       // Mark Campaign as Completed in Neon DB
       const finalStatus = anyVariantSucceeded ? "SUCCESSFUL" : "FAILED";

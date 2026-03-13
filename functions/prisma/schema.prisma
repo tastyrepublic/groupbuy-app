@@ -3,7 +3,6 @@
 
 generator client {
   provider = "prisma-client-js"
-  engineType = "binary"
 }
 
 // Note that some adapters may set a maximum length for the String type by default, please ensure your strings are long
@@ -53,8 +52,11 @@ model Campaign {
 // --- NEW FIELDS ---
   startingParticipants Int    @default(0) // For the marketing boost
   schedulerJobName     String?  // To track the Google Cloud Scheduler job
-  sellingPlanId        String?
-  sellingPlanGroupId   String?
+  sellingPlanId       String?
+  sellingPlanGroupId  String?
+  
+  // ✨ NEW: Memory bank for inventory automation
+  originalInventoryState String? @db.Text 
 
 // A Campaign can have many Groups
   groups             Group[]
@@ -84,7 +86,16 @@ model Participant {
   productVariantId String?
   groupId    Int
   group      Group @relation(fields: [groupId], references: [id])
-  status     String @default("ACTIVE")
+  status     String   @default("ACTIVE")
 
   @@unique([orderId, productVariantId])
+}
+
+// ✨ NEW: Settings model for the merchant's app preferences
+model Settings {
+  shop                        String   @id
+  autoContinueSelling         Boolean  @default(true)
+  disableContinueSellingOnEnd Boolean  @default(true)
+  createdAt                   DateTime @default(now())
+  updatedAt                   DateTime @updatedAt
 }

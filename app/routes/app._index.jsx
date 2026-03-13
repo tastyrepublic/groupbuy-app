@@ -1,5 +1,5 @@
 import { json } from "@remix-run/node";
-import { useLoaderData, useFetcher, useNavigate } from "@remix-run/react";
+import { useLoaderData, useFetcher, useNavigate, useNavigation } from "@remix-run/react";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import {
   Page,
@@ -9,37 +9,41 @@ import {
   Text,
   Thumbnail,
   Button,
-  ButtonGroup, 
   Collapsible,
   BlockStack,
   DescriptionList,
   Select,
   Badge,
   Modal,
-  Tooltip,
-  Link,
   InlineStack,
   Checkbox,
   EmptyState,
   Box,
-  Spinner,
+  Link,
+  useBreakpoints,
+  Popover, 
+  ActionList, 
+  IndexFilters,
+  useSetIndexFiltersMode,
+  IndexFiltersMode,
+  SkeletonThumbnail, // ✨ Restored Skeleton imports
+  SkeletonBodyText 
 } from "@shopify/polaris";
-import { ViewIcon, OrderIcon, ChevronDownIcon, ChevronUpIcon, ImageIcon } from '@shopify/polaris-icons';
+import { SettingsIcon, ViewIcon, OrderIcon, ChevronDownIcon, ChevronUpIcon, ImageIcon, EditIcon, DeleteIcon } from '@shopify/polaris-icons';
 import { useState, useEffect, useMemo } from "react";
 import { formatInTimeZone } from 'date-fns-tz';
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
+import { toggleContinueSelling } from "../utils/inventory.server.js";
 
 export const loader = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
   
-  // --- PAGINATION MATH ---
   const url = new URL(request.url);
   const page = parseInt(url.searchParams.get("page") || "1", 10);
   const PAGE_SIZE = 10; 
   const skip = (page - 1) * PAGE_SIZE;
 
-  // 1. Get the total count of campaigns for this shop
   const totalCampaigns = await db.campaign.count({
     where: { shop: session.shop },
   });
@@ -48,12 +52,11 @@ export const loader = async ({ request }) => {
   const hasNextPage = page < totalPages;
   const hasPreviousPage = page > 1;
 
-  // 2. Fetch ONLY the campaigns for the current page
   const campaigns = await db.campaign.findMany({
     where: { shop: session.shop },
     orderBy: { createdAt: "desc" },
-    take: PAGE_SIZE, // Limit to 10
-    skip: skip,      // Skip previous pages
+    take: PAGE_SIZE, 
+    skip: skip,      
     include: {
       groups: {
         select: {
@@ -117,7 +120,7 @@ export const loader = async ({ request }) => {
   return json({ 
     campaigns: campaignsWithHandles, 
     primaryDomainUrl,
-    pagination: { page, totalPages, hasNextPage, hasPreviousPage } // Send pagination state to the UI
+    pagination: { page, totalPages, hasNextPage, hasPreviousPage } 
   });
 };
 
@@ -128,7 +131,6 @@ export const action = async ({ request }) => {
   if (formData.get("_action") === "delete") {
     const campaignId = parseInt(formData.get("campaignId"), 10);
     
-    // 1. Fetch the campaign to get the new sellingPlanGroupId
     const campaign = await db.campaign.findUnique({
       where: { id: campaignId, shop: session.shop }
     });
@@ -137,7 +139,6 @@ export const action = async ({ request }) => {
       return json({ error: "Campaign not found" }, { status: 404 });
     }
 
-    // 2. Delete the Selling Plan Group from Shopify using the new ID architecture!
     if (campaign.sellingPlanGroupId) {
       try {
         const deleteSellingPlanMutation = `
@@ -153,7 +154,7 @@ export const action = async ({ request }) => {
         `;
 
         const deleteResponse = await admin.graphql(deleteSellingPlanMutation, {
-          variables: { id: campaign.sellingPlanGroupId } // ✅ USING THE NEW COLUMN
+          variables: { id: campaign.sellingPlanGroupId }
         });
         
         const deleteData = await deleteResponse.json();
@@ -168,7 +169,8 @@ export const action = async ({ request }) => {
       }
     }
 
-    // 3. Delete the campaign from our database
+    await toggleContinueSelling(admin, session.shop, campaign.productId, campaign.id, "END");
+
     await db.campaign.delete({
       where: { id: campaignId },
     });
@@ -177,124 +179,45 @@ export const action = async ({ request }) => {
   }
 }
 
-function DeleteCampaignButton({ campaignId, fetcher, isEnded, hasOrders }) {
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isConsentChecked, setIsConsentChecked] = useState(false);
+const getDisplayStatus = (campaign) => {
+  if (campaign.status === 'SUCCESSFUL' || campaign.status === 'FAILED') {
+    return campaign.status.charAt(0).toUpperCase() + campaign.status.slice(1).toLowerCase();
+  }
+  const now = new Date();
+  const startTime = new Date(campaign.startDateTime);
+  const endTime = new Date(campaign.endDateTime);
 
-  const isDeleting = 
-    fetcher.state !== 'idle' && 
-    fetcher.formData?.get('campaignId') === campaignId &&
-    fetcher.formData?.get('_action') === 'delete';
-
-  const handleDelete = () => {
-    const formData = { _action: 'delete', campaignId: campaignId };
-    fetcher.submit(formData, { method: 'post' });
-    setIsModalOpen(false); 
-  };
-
-  const toggleModal = () => {
-    setIsModalOpen((active) => !active);
-    setIsConsentChecked(false); 
-  };
-
-  // ✅ NEW: Combine the lock conditions
-  const isLocked = isEnded || hasOrders;
-
-  // Optional: A helpful tooltip message explaining why it's locked
-  const lockReason = hasOrders 
-    ? "Cannot delete campaigns with existing orders" 
-    : "Cannot delete ended campaigns";
-
-  const buttonMarkup = (
-    <Button
-      destructive
-      onClick={toggleModal}
-      loading={isDeleting}
-      disabled={isLocked || (fetcher.state !== 'idle' && !isDeleting)}
-    >
-      Delete
-    </Button>
-  );
-
-  return (
-    <div>
-      {/* ✅ Wrap in a tooltip if it's locked so the user isn't confused! */}
-      {isLocked ? (
-        <Tooltip content={lockReason}>
-          <span style={{ cursor: 'not-allowed' }}>
-            {buttonMarkup}
-          </span>
-        </Tooltip>
-      ) : (
-        buttonMarkup
-      )}
-
-      <Modal
-        open={isModalOpen}
-        onClose={toggleModal}
-        title="Delete this campaign?"
-        primaryAction={{
-          content: 'Delete campaign',
-          destructive: true,
-          onAction: handleDelete,
-          loading: isDeleting,
-          disabled: !isConsentChecked || (fetcher.state !== 'idle' && !isDeleting),
-        }}
-        secondaryActions={[{ content: 'Cancel', onAction: toggleModal }]}
-      >
-        <Modal.Section>
-          <Text as="p">
-            This action can’t be undone. All campaign data will be permanently lost.
-          </Text>
-          <Box paddingBlockStart="200">
-            <Checkbox
-              label="I understand this action cannot be undone."
-              checked={isConsentChecked}
-              onChange={(newValue) => setIsConsentChecked(newValue)}
-            />
-          </Box>
-        </Modal.Section>
-      </Modal>
-    </div>
-  );
-}
+  if (now < startTime) return 'Scheduled';
+  if (now >= startTime && now < endTime) {
+    if (campaign.status === 'PROCESSING') return 'Processing'; 
+    return 'Active';
+  }
+  if (now >= endTime) return 'Processing';
+  return 'Unknown';
+};
 
 function CampaignRow({ campaign, index, primaryDomainUrl, deleteFetcher }) {
   const [open, setOpen] = useState(false);
   const [displayTimezone, setDisplayTimezone] = useState('Europe/London');
+  const { smDown } = useBreakpoints(); 
+  
+  const [popoverActive, setPopoverActive] = useState(false);
+  const togglePopover = () => setPopoverActive((active) => !active);
+
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isConsentChecked, setIsConsentChecked] = useState(false);
 
   const tiers = JSON.parse(campaign.tiersJson || '[]');
   const tierTones = ['info', 'success', 'attention', 'warning', 'new'];
 
-  const getDisplayStatus = (campaign) => {
-    // 1. If the database explicitly finished it, trust the database
-    if (campaign.status === 'SUCCESSFUL' || campaign.status === 'FAILED') {
-      return campaign.status.charAt(0).toUpperCase() + campaign.status.slice(1).toLowerCase();
-    }
-
-    const now = new Date();
-    const startTime = new Date(campaign.startDateTime);
-    const endTime = new Date(campaign.endDateTime);
-
-    // 2. If it hasn't started yet
-    if (now < startTime) return 'Scheduled';
-
-    // 3. If it is currently running in the active window
-    if (now >= startTime && now < endTime) {
-      if (campaign.status === 'PROCESSING') return 'Processing'; // Just in case
-      return 'Active';
-    }
-
-    // 4. THE FIX: Time is up, but the Sweeper hasn't finished the database updates yet
-    if (now >= endTime) return 'Processing';
-
-    return 'Unknown';
-  };
+  const displayStatus = getDisplayStatus(campaign);
+  const isLocked = ['Successful', 'Failed', 'Processing'].includes(displayStatus); 
+  const isDeleteLocked = isLocked || campaign.hasOrders;
 
   const getStatusBadgeTone = (status) => {
     switch (status) {
       case 'Active': return 'info';
-      case 'Processing': return 'warning'; // 🟡 Adds a yellow/orange badge while the backend works
+      case 'Processing': return 'warning'; 
       case 'Successful': return 'success';
       case 'Failed': return 'critical';
       case 'Scheduled': return 'attention';
@@ -322,91 +245,107 @@ function CampaignRow({ campaign, index, primaryDomainUrl, deleteFetcher }) {
 
   const numericProductId = campaign.productId.split('/').pop();
 
+  const isDeleting = 
+    deleteFetcher.state !== 'idle' && 
+    deleteFetcher.formData?.get('campaignId') === campaign.id.toString() &&
+    deleteFetcher.formData?.get('_action') === 'delete';
+
+  const toggleDeleteModal = () => {
+    setIsDeleteModalOpen((active) => !active);
+    setIsConsentChecked(false); 
+    setPopoverActive(false); 
+  };
+
+  const handleDelete = () => {
+    const formData = { _action: 'delete', campaignId: campaign.id.toString() };
+    deleteFetcher.submit(formData, { method: 'post' });
+    // ✨ REMOVED: setIsDeleteModalOpen(false) 
+    // The modal will now stay open and show the spinner until the campaign is destroyed!
+  };
+
+  const actionMenu = (
+    <Popover
+      active={popoverActive}
+      activator={<Button onClick={togglePopover} disclosure>Actions</Button>}
+      autofocusTarget="first-node"
+      onClose={togglePopover}
+      preferredAlignment="right"
+    >
+      <ActionList
+        actionRole="menuitem"
+        items={[
+          ...(productUrl ? [{ 
+            content: 'Preview on Store', 
+            icon: ViewIcon, 
+            onAction: () => window.open(productUrl, '_blank') 
+          }] : []),
+          { content: 'View Orders', icon: OrderIcon, url: `/app/campaigns/${campaign.id}/orders` },
+          { 
+            content: 'Edit', 
+            icon: EditIcon, 
+            url: isLocked ? undefined : `/app/campaigns/${campaign.id}`, // ✨ FIX applied here
+            disabled: isLocked 
+          },
+          { 
+            content: 'Delete', 
+            icon: DeleteIcon, 
+            destructive: true, 
+            disabled: isDeleteLocked || isDeleting, 
+            onAction: toggleDeleteModal 
+          }
+        ]}
+      />
+    </Popover>
+  );
+
   return (
     <>
       <IndexTable.Row id={campaign.id} key={campaign.id} position={index}>
-        <IndexTable.Cell>
-          <InlineStack blockAlign="center" gap="300" wrap={false}>
-            <Button
-              variant="tertiary"
-              onClick={() => setOpen(!open)}
-              icon={open ? ChevronUpIcon : ChevronDownIcon}
-              accessibilityLabel={open ? "Collapse details" : "Expand details"}
-            />
-            <Thumbnail
-              source={campaign.productImage || ImageIcon} 
-              alt={campaign.productTitle}
-              size="small"
-            />
-            <Link
-              url={`shopify://admin/products/${numericProductId}`}
-              target="_top"
-              removeUnderline
-            >
-              <Text variant="bodyMd" fontWeight="bold" as="span">
-                {campaign.productTitle}
-              </Text>
-            </Link>
-          </InlineStack>
-        </IndexTable.Cell>
-
-        <IndexTable.Cell>
-          {(() => {
-            const displayStatus = getDisplayStatus(campaign);
-            return (
-              <Badge size="small" tone={getStatusBadgeTone(displayStatus)}>
-                {displayStatus}
-              </Badge>
-            );
-          })()}
-        </IndexTable.Cell>
-        <IndexTable.Cell>{formatDateOnly(campaign.createdAt)}</IndexTable.Cell>
-        <IndexTable.Cell>
-          <ButtonGroup>
-            {productUrl && (
-              <Tooltip content="Preview on Online Store"> 
-                <Button
-                  url={productUrl}
-                  target="_blank"
-                  icon={ViewIcon}
-                  accessibilityLabel="Preview product on online store" 
-                />
-              </Tooltip>
-            )}
-            <Tooltip content="View all orders for this campaign">
-              <Button 
-                url={`/app/campaigns/${campaign.id}/orders`}
-                icon={OrderIcon}
-                accessibilityLabel="View orders for this campaign"
-              >
-                View Orders
-              </Button>
-            </Tooltip>
-            
-            <Button url={`/app/campaigns/${campaign.id}`}>
-              Edit
-            </Button>
-            
-            <DeleteCampaignButton 
-                campaignId={campaign.id.toString()} 
-                fetcher={deleteFetcher}
-                isEnded={['Successful', 'Failed', 'Processing'].includes(getDisplayStatus(campaign))}
-            />
-          </ButtonGroup>
-        </IndexTable.Cell>
+        {smDown ? (
+          <IndexTable.Cell>
+            <BlockStack gap="400">
+              <InlineStack blockAlign="center" gap="300" wrap={false}>
+                <Button variant="tertiary" onClick={() => setOpen(!open)} icon={open ? ChevronUpIcon : ChevronDownIcon} accessibilityLabel={open ? "Collapse details" : "Expand details"} />
+                <Thumbnail source={campaign.productImage || ImageIcon} alt={campaign.productTitle} size="small" />
+                <Link url={`shopify://admin/products/${numericProductId}`} target="_top" removeUnderline>
+                  <Text variant="bodyMd" fontWeight="bold" as="span">{campaign.productTitle}</Text>
+                </Link>
+              </InlineStack>
+              <InlineStack align="space-between" blockAlign="center" wrap>
+                <InlineStack gap="300" blockAlign="center">
+                  <Badge size="small" tone={getStatusBadgeTone(displayStatus)}>{displayStatus}</Badge>
+                  <Text variant="bodySm" tone="subdued">Date Created: {formatDateOnly(campaign.createdAt)}</Text>
+                </InlineStack>
+                {actionMenu} 
+              </InlineStack>
+            </BlockStack>
+          </IndexTable.Cell>
+        ) : (
+          <>
+            <IndexTable.Cell>
+              <InlineStack blockAlign="center" gap="300" wrap={false}>
+                <Button variant="tertiary" onClick={() => setOpen(!open)} icon={open ? ChevronUpIcon : ChevronDownIcon} accessibilityLabel={open ? "Collapse details" : "Expand details"} />
+                <Thumbnail source={campaign.productImage || ImageIcon} alt={campaign.productTitle} size="small" />
+                <Link url={`shopify://admin/products/${numericProductId}`} target="_top" removeUnderline>
+                  <Text variant="bodyMd" fontWeight="bold" as="span">{campaign.productTitle}</Text>
+                </Link>
+              </InlineStack>
+            </IndexTable.Cell>
+            <IndexTable.Cell>
+              <Badge size="small" tone={getStatusBadgeTone(displayStatus)}>{displayStatus}</Badge>
+            </IndexTable.Cell>
+            <IndexTable.Cell>{formatDateOnly(campaign.createdAt)}</IndexTable.Cell>
+            <IndexTable.Cell>
+              {actionMenu} 
+            </IndexTable.Cell>
+          </>
+        )}
       </IndexTable.Row>
+
       <IndexTable.Row id={`details-${campaign.id}`} key={`details-${campaign.id}`}>
-        
-        {/* ✅ FINAL FIX: Added `maxWidth: 0`. This stops the HTML table from expanding the first column! */}
-        <td colSpan={4} className="Polaris-IndexTable__TableCell" style={{ padding: 0, borderTop: 'none', maxWidth: 0 }}>
-          
-          {/* ✅ Wrapped in a 100% width div so the internal content safely fills the space */}
+        <td colSpan={smDown ? 1 : 4} className="Polaris-IndexTable__TableCell" style={{ padding: 0, borderTop: 'none', maxWidth: 0 }}>
           <div style={{ width: '100%', minWidth: 0 }}>
-            <Collapsible
-              open={open}
-              id={`collapsible-${campaign.id}`}
-              transition={{ duration: '300ms', timingFunction: 'ease-in-out' }}
-            >
+            <Collapsible open={open} id={`collapsible-${campaign.id}`} transition={{ duration: '300ms', timingFunction: 'ease-in-out' }}>
               <Box padding="400" background="bg-surface-secondary">
                 <BlockStack gap="400">
                   <DescriptionList
@@ -417,13 +356,7 @@ function CampaignRow({ campaign, index, primaryDomainUrl, deleteFetcher }) {
                           <InlineStack blockAlign="center" gap="400">
                             <Text as="span">{campaign.timezone}</Text>
                             <div style={{ width: '220px' }}>
-                              <Select
-                                label="Display Time In"
-                                labelHidden
-                                options={timezoneOptions}
-                                onChange={setDisplayTimezone}
-                                value={displayTimezone}
-                              />
+                              <Select label="Display Time In" labelHidden options={timezoneOptions} onChange={setDisplayTimezone} value={displayTimezone} />
                             </div>
                           </InlineStack>
                         ) 
@@ -435,10 +368,7 @@ function CampaignRow({ campaign, index, primaryDomainUrl, deleteFetcher }) {
                         description: tiers.length > 0 ? (
                           <InlineStack gap="200" wrap>
                             {tiers.map((tier, idx) => (
-                              <Badge 
-                                key={idx} 
-                                tone={tierTones[idx % tierTones.length]} 
-                              >
+                              <Badge key={idx} tone={tierTones[idx % tierTones.length]}>
                                 {tier.quantity} {campaign.countingMethod === 'ITEM_QUANTITY' ? 'items' : 'buyers'} ➔ {tier.discount}% off
                               </Badge>
                             ))}
@@ -455,18 +385,70 @@ function CampaignRow({ campaign, index, primaryDomainUrl, deleteFetcher }) {
           </div>
         </td>
       </IndexTable.Row>
+
+      <Modal
+        open={isDeleteModalOpen}
+        onClose={toggleDeleteModal}
+        title="Delete this campaign?"
+        primaryAction={{
+          content: 'Delete campaign',
+          destructive: true,
+          onAction: handleDelete,
+          loading: isDeleting, // ✨ Controls the spinner on the button!
+          disabled: !isConsentChecked || (deleteFetcher.state !== 'idle' && !isDeleting),
+        }}
+        secondaryActions={[{ content: 'Cancel', onAction: toggleDeleteModal }]}
+      >
+        <Modal.Section>
+          <Text as="p">
+            This action can’t be undone. All campaign data will be permanently lost.
+          </Text>
+          <Box paddingBlockStart="200">
+            <Checkbox
+              label="I understand this action cannot be undone."
+              checked={isConsentChecked}
+              onChange={(newValue) => setIsConsentChecked(newValue)}
+            />
+          </Box>
+        </Modal.Section>
+      </Modal>
     </>
   );
 }
 
 export default function Index() {
-  // ✅ Extract the pagination object from the loader
-  const { campaigns, primaryDomainUrl, pagination } = useLoaderData();
+  const { campaigns: initialCampaigns, primaryDomainUrl, pagination } = useLoaderData();
   const [hasMounted, setHasMounted] = useState(false);
+  const { smDown } = useBreakpoints(); 
   
   const app = useAppBridge();
   const deleteFetcher = useFetcher();
-  const navigate = useNavigate(); // ✅ Add navigate hook
+  const navigate = useNavigate(); 
+  const navigation = useNavigation();
+
+  const [itemStrings] = useState(['All', 'Active', 'Processing', 'Completed']);
+  
+  const [selected, setSelected] = useState(0);
+  const [queryValue, setQueryValue] = useState('');
+  const [sortSelected, setSortSelected] = useState(['date desc']);
+  const { mode, setMode } = useSetIndexFiltersMode(IndexFiltersMode.Default);
+
+  const [appliedFilters, setAppliedFilters] = useState({ selected: 0, queryValue: '', sortSelected: ['date desc'] });
+  const [isFiltering, setIsFiltering] = useState(false);
+
+  useEffect(() => {
+    setIsFiltering(true);
+    const timer = setTimeout(() => {
+      setAppliedFilters({ selected, queryValue, sortSelected });
+      setIsFiltering(false);
+    }, 250); 
+    
+    return () => clearTimeout(timer);
+  }, [selected, queryValue, sortSelected]);
+
+  const isNavigating = navigation.state === "loading";
+  const isDeleting = deleteFetcher.state !== 'idle' && deleteFetcher.formData?.get('_action') === 'delete';
+  const isBusy = isNavigating || isDeleting || isFiltering; 
 
   useEffect(() => {
     setHasMounted(true);
@@ -483,7 +465,33 @@ export default function Index() {
     }
   }, [deleteFetcher.state, deleteFetcher.data, app]);
 
-  const rowMarkup = campaigns.map(
+  const filteredCampaigns = useMemo(() => {
+    let filtered = [...initialCampaigns];
+
+    if (appliedFilters.queryValue) {
+      const q = appliedFilters.queryValue.toLowerCase();
+      filtered = filtered.filter(c => c.productTitle.toLowerCase().includes(q));
+    }
+
+    if (appliedFilters.selected > 0) {
+      const tabName = itemStrings[appliedFilters.selected];
+      filtered = filtered.filter(c => {
+        const status = getDisplayStatus(c);
+        if (tabName === 'Completed') return ['Successful', 'Failed'].includes(status);
+        return status === tabName;
+      });
+    }
+
+    if (appliedFilters.sortSelected[0] === 'date asc') {
+      filtered.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+    } else {
+      filtered.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    }
+
+    return filtered;
+  }, [initialCampaigns, appliedFilters, itemStrings]);
+
+  const rowMarkup = filteredCampaigns.map(
     (campaign, index) => (
       <CampaignRow
         key={campaign.id}
@@ -495,40 +503,134 @@ export default function Index() {
     )
   );
 
+  const tableHeadings = smDown 
+    ? [{ title: 'Campaigns' }] 
+    : [
+        { title: 'Product' },
+        { title: 'Status' },
+        { title: 'Date Created' },
+        { title: 'Action' },
+      ];
+
+  const tabs = itemStrings.map((item, index) => ({
+    content: item,
+    id: `${item}-${index}`,
+    actions: [],
+    isLocked: index === 0,
+  }));
+
+  // ✨ RESTORED: Skeleton Rows for initial loading state
+  const skeletonRows = Array.from({ length: 5 }).map((_, index) => (
+    <IndexTable.Row id={`skeleton-${index}`} key={`skeleton-${index}`} position={index}>
+      {smDown ? (
+        <IndexTable.Cell>
+          <BlockStack gap="400">
+            <InlineStack blockAlign="center" gap="300" wrap={false}>
+              <Button variant="tertiary" icon={ChevronDownIcon} disabled />
+              <SkeletonThumbnail size="small" />
+              <div style={{ flex: 1 }}><SkeletonBodyText lines={1} /></div>
+            </InlineStack>
+            <InlineStack align="space-between" blockAlign="center" wrap>
+              <Box width="60px"><SkeletonBodyText lines={1} /></Box>
+              <Button disabled disclosure>Actions</Button>
+            </InlineStack>
+          </BlockStack>
+        </IndexTable.Cell>
+      ) : (
+        <>
+          <IndexTable.Cell>
+            <InlineStack blockAlign="center" gap="300" wrap={false}>
+              <Button variant="tertiary" icon={ChevronDownIcon} disabled />
+              <SkeletonThumbnail size="small" />
+              <Box width="150px"><SkeletonBodyText lines={1} /></Box>
+            </InlineStack>
+          </IndexTable.Cell>
+          <IndexTable.Cell><Box width="60px"><SkeletonBodyText lines={1} /></Box></IndexTable.Cell>
+          <IndexTable.Cell><Box width="80px"><SkeletonBodyText lines={1} /></Box></IndexTable.Cell>
+          <IndexTable.Cell>
+            <Button disabled disclosure>Actions</Button>
+          </IndexTable.Cell>
+        </>
+      )}
+    </IndexTable.Row>
+  ));
+
   return (
     <Page
-      title="Group Buy Campaigns"
-      primaryAction={{
-        content: "Create campaign",
-        url: "/app/campaigns/new",
-      }}
-    >
+  title="Group Buy Campaigns"
+  primaryAction={{
+    content: "Create campaign",
+    url: "/app/campaigns/new",
+  }}
+  secondaryActions={[ // ✨ Add this block
+    {
+      content: "Settings",
+      icon: SettingsIcon,
+      url: "/app/settings",
+    }
+  ]}
+>
+      <style>{`
+        .native-fade-table .Polaris-IndexTable tbody {
+          transition: opacity 250ms ease-in-out !important;
+        }
+        .native-fade-table.is-busy .Polaris-IndexTable tbody {
+          opacity: 0.4 !important;
+          pointer-events: none;
+        }
+      `}</style>
+
       <Layout>
         <Layout.Section>
           <Card padding="0">
-            {hasMounted ? (
-              campaigns.length === 0 && pagination.page === 1 ? (
-                <EmptyState
-                  heading="Manage your group buy campaigns"
-                  action={{
-                    content: 'Create campaign',
-                    url: '/app/campaigns/new',
-                  }}
-                  image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
-                >
-                  <p>Create your first campaign to start offering group buy discounts to your customers.</p>
-                </EmptyState>
-              ) : (
+            <IndexFilters
+              sortOptions={[
+                { label: 'Date (Newest first)', value: 'date desc', directionLabel: 'Descending' },
+                { label: 'Date (Oldest first)', value: 'date asc', directionLabel: 'Ascending' },
+              ]}
+              sortSelected={sortSelected}
+              queryValue={queryValue}
+              queryPlaceholder="Search products"
+              onQueryChange={setQueryValue}
+              onQueryClear={() => setQueryValue('')}
+              onSort={setSortSelected}
+              tabs={tabs}
+              selected={selected}
+              onSelect={setSelected}
+              canCreateNewView={false}
+              filters={[]}
+              appliedFilters={[]}
+              onClearAll={() => {}}
+              mode={mode}
+              setMode={setMode}
+              disabled={isDeleting}
+              loading={isBusy} 
+              cancelAction={{
+                onAction: () => {
+                  setQueryValue('');
+                  setMode(IndexFiltersMode.Default);
+                },
+              }}
+            />
+
+            {!hasMounted ? (
+              <IndexTable itemCount={5} headings={tableHeadings} selectable={false}>
+                {skeletonRows}
+              </IndexTable>
+            ) : initialCampaigns.length === 0 ? (
+              <EmptyState
+                heading="Manage your group buy campaigns"
+                action={{ content: 'Create campaign', url: '/app/campaigns/new' }}
+                image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
+              >
+                <p>Create your first campaign to start offering group buy discounts to your customers.</p>
+              </EmptyState>
+            ) : (
+              <div className={`native-fade-table ${isBusy ? 'is-busy' : ''}`}>
                 <IndexTable
-                  itemCount={campaigns.length}
-                  headings={[
-                    { title: 'Product' },
-                    { title: 'Status' },
-                    { title: 'Date Created' },
-                    { title: 'Action' },
-                  ]}
+                  itemCount={filteredCampaigns.length}
+                  headings={tableHeadings}
                   selectable={false}
-                  // ✅ NEW: Add native Polaris pagination controls to the bottom of the table
                   pagination={{
                     hasNext: pagination.hasNextPage,
                     hasPrevious: pagination.hasPreviousPage,
@@ -537,15 +639,17 @@ export default function Index() {
                     label: `Page ${pagination.page} of ${pagination.totalPages}`,
                   }}
                 >
-                  {rowMarkup}
+                  {filteredCampaigns.length === 0 ? (
+                    <IndexTable.Row>
+                      <IndexTable.Cell colSpan={4}>
+                        <Box padding="400" textAlign="center">
+                          <Text tone="subdued">No campaigns match your filter.</Text>
+                        </Box>
+                      </IndexTable.Cell>
+                    </IndexTable.Row>
+                  ) : rowMarkup}
                 </IndexTable>
-              )
-            ) : (
-              <Box padding="800">
-                <InlineStack align="center" blockAlign="center">
-                  <Spinner accessibilityLabel="Loading campaigns" size="large" />
-                </InlineStack>
-              </Box>
+              </div>
             )}
           </Card>
         </Layout.Section>
