@@ -1,0 +1,90 @@
+{
+  "Settings": {
+    "title": "設定",
+    "save": "儲存",
+    "saved": "設定已成功儲存",
+    "inventory": {
+      "title": "庫存自動化",
+      "description": "在團購活動開始或結束時自動更新產品庫存設定。",
+      "enableLabel": "建立活動時啟用「缺貨時繼續銷售」",
+      "enableHelp": "確保即使實際庫存為零，顧客也能參與團購。",
+      "disableLabel": "活動結束或被刪除時停用「缺貨時繼續銷售」",
+      "disableHelp": "一旦活動失效，將產品恢復至其原始庫存行為。"
+    },
+    "future": {
+      "title": "未來升級",
+      "description": "管理實驗性功能和未來的應用程式增強功能。",
+      "text": "新的測試功能和自動化設定將在未來的更新中顯示於此。"
+    }
+  },
+  "Dashboard": {
+    "title": "團購活動",
+    "createCampaign": "建立活動",
+    "settings": "設定",
+    "tabs": {
+      "all": "全部",
+      "active": "進行中",
+      "processing": "處理中",
+      "completed": "已完成"
+    },
+    "status": {
+      "scheduled": "已排程",
+      "active": "進行中",
+      "processing": "處理中",
+      "successful": "成功",
+      "failed": "失敗",
+      "unknown": "未知"
+    },
+    "table": {
+      "product": "產品",
+      "status": "狀態",
+      "dateCreated": "建立日期",
+      "action": "操作",
+      "campaigns": "活動",
+      "empty": "沒有符合篩選條件的活動。"
+    },
+    "row": {
+      "actions": "操作",
+      "preview": "在商店預覽",
+      "viewOrders": "檢視訂單",
+      "edit": "編輯",
+      "delete": "刪除",
+      "timezone": "活動時區",
+      "displayTimeIn": "顯示時間",
+      "startTime": "轉換後的開始時間",
+      "endTime": "轉換後的結束時間",
+      "discountTiers": "折扣層級",
+      "items": "件商品",
+      "buyers": "位買家",
+      "off": "折扣",
+      "noTiers": "尚未設定層級。"
+    },
+    "deleteModal": {
+      "title": "刪除此活動？",
+      "confirm": "刪除活動",
+      "cancel": "取消",
+      "warning": "此操作無法復原。所有活動資料將永久遺失。",
+      "checkbox": "我了解此操作無法復原。"
+    },
+    "emptyState": {
+      "heading": "管理您的團購活動",
+      "description": "建立您的第一個活動，開始為顧客提供團購折扣。"
+    },
+    "filters": {
+      "search": "搜尋產品",
+      "newest": "日期 (由新到舊)",
+      "oldest": "日期 (由舊到新)",
+      "descending": "遞減",
+      "ascending": "遞增",
+      "cancel": "取消"
+    },
+    "searchEmpty": {
+      "title": "找不到項目",
+      "description": "請嘗試變更篩選條件或搜尋字詞"
+    },
+    "paginationLabel": "第 {{page}} 頁，共 {{totalPages}} 頁",
+    "messages": {
+      "deleteSuccess": "活動已成功刪除。"
+    }
+  }
+}

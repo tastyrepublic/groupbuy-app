@@ -26,8 +26,9 @@ import {
   IndexFilters,
   useSetIndexFiltersMode,
   IndexFiltersMode,
-  SkeletonThumbnail, // ✨ Restored Skeleton imports
-  SkeletonBodyText 
+  SkeletonThumbnail,
+  SkeletonBodyText,
+  EmptySearchResult
 } from "@shopify/polaris";
 import { SettingsIcon, ViewIcon, OrderIcon, ChevronDownIcon, ChevronUpIcon, ImageIcon, EditIcon, DeleteIcon } from '@shopify/polaris-icons';
 import { useState, useEffect, useMemo } from "react";
@@ -36,9 +37,14 @@ import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { toggleContinueSelling } from "../utils/inventory.server.js";
 
+// ✨ 1. Import your i18n utility
+import { getI18n } from "../utils/i18n.server.js";
+
 export const loader = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
-  
+  const { t } = await getI18n(request);
+
+  // 1. Calculate the page and total campaigns FIRST
   const url = new URL(request.url);
   const page = parseInt(url.searchParams.get("page") || "1", 10);
   const PAGE_SIZE = 10; 
@@ -52,6 +58,83 @@ export const loader = async ({ request }) => {
   const hasNextPage = page < totalPages;
   const hasPreviousPage = page > 1;
 
+  // 2. NOW we can build the translations, because 'page' and 'totalPages' exist!
+  const translations = {
+    title: t("Dashboard.title", "Group Buy Campaigns"),
+    createCampaign: t("Dashboard.createCampaign", "Create campaign"),
+    settings: t("Dashboard.settings", "Settings"),
+    tabs: {
+      all: t("Dashboard.tabs.all", "All"),
+      active: t("Dashboard.tabs.active", "Active"),
+      processing: t("Dashboard.tabs.processing", "Processing"),
+      completed: t("Dashboard.tabs.completed", "Completed")
+    },
+    status: {
+      scheduled: t("Dashboard.status.scheduled", "Scheduled"),
+      active: t("Dashboard.status.active", "Active"),
+      processing: t("Dashboard.status.processing", "Processing"),
+      successful: t("Dashboard.status.successful", "Successful"),
+      failed: t("Dashboard.status.failed", "Failed"),
+      unknown: t("Dashboard.status.unknown", "Unknown")
+    },
+    table: {
+      product: t("Dashboard.table.product", "Product"),
+      status: t("Dashboard.table.status", "Status"),
+      dateCreated: t("Dashboard.table.dateCreated", "Date Created"),
+      action: t("Dashboard.table.action", "Action"),
+      campaigns: t("Dashboard.table.campaigns", "Campaigns"),
+      empty: t("Dashboard.table.empty", "No campaigns match your filter.")
+    },
+    row: {
+      actions: t("Dashboard.row.actions", "Actions"),
+      preview: t("Dashboard.row.preview", "Preview on Store"),
+      viewOrders: t("Dashboard.row.viewOrders", "View Orders"),
+      edit: t("Dashboard.row.edit", "Edit"),
+      delete: t("Dashboard.row.delete", "Delete"),
+      timezone: t("Dashboard.row.timezone", "Campaign Timezone"),
+      displayTimeIn: t("Dashboard.row.displayTimeIn", "Display Time In"),
+      startTime: t("Dashboard.row.startTime", "Converted Start Time"),
+      endTime: t("Dashboard.row.endTime", "Converted End Time"),
+      discountTiers: t("Dashboard.row.discountTiers", "Discount Tiers"),
+      items: t("Dashboard.row.items", "items"),
+      buyers: t("Dashboard.row.buyers", "buyers"),
+      off: t("Dashboard.row.off", "off"),
+      noTiers: t("Dashboard.row.noTiers", "No tiers configured.")
+    },
+    deleteModal: {
+      title: t("Dashboard.deleteModal.title", "Delete this campaign?"),
+      confirm: t("Dashboard.deleteModal.confirm", "Delete campaign"),
+      cancel: t("Dashboard.deleteModal.cancel", "Cancel"),
+      warning: t("Dashboard.deleteModal.warning", "This action can’t be undone. All campaign data will be permanently lost."),
+      checkbox: t("Dashboard.deleteModal.checkbox", "I understand this action cannot be undone.")
+    },
+    emptyState: {
+      heading: t("Dashboard.emptyState.heading", "Manage your group buy campaigns"),
+      description: t("Dashboard.emptyState.description", "Create your first campaign to start offering group buy discounts to your customers.")
+    },
+    filters: {
+      search: t("Dashboard.filters.search", "Search products"),
+      newest: t("Dashboard.filters.newest", "Date (Newest first)"),
+      oldest: t("Dashboard.filters.oldest", "Date (Oldest first)"),
+      descending: t("Dashboard.filters.descending", "Descending"),
+      ascending: t("Dashboard.filters.ascending", "Ascending"),
+      cancel: t("Dashboard.filters.cancel", "Cancel")
+    },
+    searchEmpty: {
+      title: t("Dashboard.searchEmpty.title", "No Items found"),
+      description: t("Dashboard.searchEmpty.description", "Try changing the filters or search term")
+    },
+    paginationLabel: t("Dashboard.paginationLabel", {
+      page: page,
+      totalPages: Math.max(1, totalPages), // Much cleaner math now!
+      defaultValue: `Page ${page} of ${Math.max(1, totalPages)}`
+    }),
+    messages: {
+      deleteSuccess: t("Dashboard.messages.deleteSuccess", "Campaign deleted successfully.")
+    }
+  };
+
+  // 3. Fetch the actual campaigns
   const campaigns = await db.campaign.findMany({
     where: { shop: session.shop },
     orderBy: { createdAt: "desc" },
@@ -77,6 +160,7 @@ export const loader = async ({ request }) => {
     return json({ 
       campaigns: [], 
       primaryDomainUrl,
+      translations, // ✨ Return translations
       pagination: { page, hasNextPage, hasPreviousPage }
     });
   }
@@ -120,6 +204,7 @@ export const loader = async ({ request }) => {
   return json({ 
     campaigns: campaignsWithHandles, 
     primaryDomainUrl,
+    translations, // ✨ Return translations
     pagination: { page, totalPages, hasNextPage, hasPreviousPage } 
   });
 };
@@ -179,24 +264,36 @@ export const action = async ({ request }) => {
   }
 }
 
-const getDisplayStatus = (campaign) => {
+// ✨ UPDATE: Status logic uses pure uppercase keys for solid internal logic, independent of translation language
+const getInternalStatus = (campaign) => {
   if (campaign.status === 'SUCCESSFUL' || campaign.status === 'FAILED') {
-    return campaign.status.charAt(0).toUpperCase() + campaign.status.slice(1).toLowerCase();
+    return campaign.status;
   }
   const now = new Date();
   const startTime = new Date(campaign.startDateTime);
   const endTime = new Date(campaign.endDateTime);
 
-  if (now < startTime) return 'Scheduled';
+  if (now < startTime) return 'SCHEDULED';
   if (now >= startTime && now < endTime) {
-    if (campaign.status === 'PROCESSING') return 'Processing'; 
-    return 'Active';
+    if (campaign.status === 'PROCESSING') return 'PROCESSING'; 
+    return 'ACTIVE';
   }
-  if (now >= endTime) return 'Processing';
-  return 'Unknown';
+  if (now >= endTime) return 'PROCESSING';
+  return 'UNKNOWN';
 };
 
-function CampaignRow({ campaign, index, primaryDomainUrl, deleteFetcher }) {
+const getStatusBadgeTone = (internalStatus) => {
+  switch (internalStatus) {
+    case 'ACTIVE': return 'info';
+    case 'PROCESSING': return 'warning'; 
+    case 'SUCCESSFUL': return 'success';
+    case 'FAILED': return 'critical';
+    case 'SCHEDULED': return 'attention';
+    default: return 'default';
+  }
+};
+
+function CampaignRow({ campaign, index, primaryDomainUrl, deleteFetcher, translations }) {
   const [open, setOpen] = useState(false);
   const [displayTimezone, setDisplayTimezone] = useState(campaign.timezone || 'Europe/London');
   const { smDown } = useBreakpoints(); 
@@ -210,20 +307,12 @@ function CampaignRow({ campaign, index, primaryDomainUrl, deleteFetcher }) {
   const tiers = JSON.parse(campaign.tiersJson || '[]');
   const tierTones = ['info', 'success', 'attention', 'warning', 'new'];
 
-  const displayStatus = getDisplayStatus(campaign);
-  const isLocked = ['Successful', 'Failed', 'Processing'].includes(displayStatus); 
+  // ✨ Evaluate status securely, then map to correct translation
+  const internalStatus = getInternalStatus(campaign);
+  const displayStatus = translations.status[internalStatus.toLowerCase()] || internalStatus;
+  
+  const isLocked = ['SUCCESSFUL', 'FAILED', 'PROCESSING'].includes(internalStatus); 
   const isDeleteLocked = isLocked || campaign.hasOrders;
-
-  const getStatusBadgeTone = (status) => {
-    switch (status) {
-      case 'Active': return 'info';
-      case 'Processing': return 'warning'; 
-      case 'Successful': return 'success';
-      case 'Failed': return 'critical';
-      case 'Scheduled': return 'attention';
-      default: return 'default';
-    }
-  };
 
   const formatForDisplay = (isoString, timeZone) => {
     if (!isoString || !timeZone) return "N/A";
@@ -259,14 +348,12 @@ function CampaignRow({ campaign, index, primaryDomainUrl, deleteFetcher }) {
   const handleDelete = () => {
     const formData = { _action: 'delete', campaignId: campaign.id.toString() };
     deleteFetcher.submit(formData, { method: 'post' });
-    // ✨ REMOVED: setIsDeleteModalOpen(false) 
-    // The modal will now stay open and show the spinner until the campaign is destroyed!
   };
 
   const actionMenu = (
     <Popover
       active={popoverActive}
-      activator={<Button onClick={togglePopover} disclosure>Actions</Button>}
+      activator={<Button onClick={togglePopover} disclosure>{translations.row.actions}</Button>}
       autofocusTarget="first-node"
       onClose={togglePopover}
       preferredAlignment="right"
@@ -275,19 +362,19 @@ function CampaignRow({ campaign, index, primaryDomainUrl, deleteFetcher }) {
         actionRole="menuitem"
         items={[
           ...(productUrl ? [{ 
-            content: 'Preview on Store', 
+            content: translations.row.preview, 
             icon: ViewIcon, 
             onAction: () => window.open(productUrl, '_blank') 
           }] : []),
-          { content: 'View Orders', icon: OrderIcon, url: `/app/campaigns/${campaign.id}/orders` },
+          { content: translations.row.viewOrders, icon: OrderIcon, url: `/app/campaigns/${campaign.id}/orders` },
           { 
-            content: 'Edit', 
+            content: translations.row.edit, 
             icon: EditIcon, 
-            url: isLocked ? undefined : `/app/campaigns/${campaign.id}`, // ✨ FIX applied here
+            url: isLocked ? undefined : `/app/campaigns/${campaign.id}`,
             disabled: isLocked 
           },
           { 
-            content: 'Delete', 
+            content: translations.row.delete, 
             icon: DeleteIcon, 
             destructive: true, 
             disabled: isDeleteLocked || isDeleting, 
@@ -305,7 +392,7 @@ function CampaignRow({ campaign, index, primaryDomainUrl, deleteFetcher }) {
           <IndexTable.Cell>
             <BlockStack gap="400">
               <InlineStack blockAlign="center" gap="300" wrap={false}>
-                <Button variant="tertiary" onClick={() => setOpen(!open)} icon={open ? ChevronUpIcon : ChevronDownIcon} accessibilityLabel={open ? "Collapse details" : "Expand details"} />
+                <Button variant="tertiary" onClick={() => setOpen(!open)} icon={open ? ChevronUpIcon : ChevronDownIcon} />
                 <Thumbnail source={campaign.productImage || ImageIcon} alt={campaign.productTitle} size="small" />
                 <Link url={`shopify://admin/products/${numericProductId}`} target="_top" removeUnderline>
                   <Text variant="bodyMd" fontWeight="bold" as="span">{campaign.productTitle}</Text>
@@ -313,8 +400,8 @@ function CampaignRow({ campaign, index, primaryDomainUrl, deleteFetcher }) {
               </InlineStack>
               <InlineStack align="space-between" blockAlign="center" wrap>
                 <InlineStack gap="300" blockAlign="center">
-                  <Badge size="small" tone={getStatusBadgeTone(displayStatus)}>{displayStatus}</Badge>
-                  <Text variant="bodySm" tone="subdued">Date Created: {formatDateOnly(campaign.createdAt)}</Text>
+                  <Badge size="small" tone={getStatusBadgeTone(internalStatus)}>{displayStatus}</Badge>
+                  <Text variant="bodySm" tone="subdued">{translations.table.dateCreated}: {formatDateOnly(campaign.createdAt)}</Text>
                 </InlineStack>
                 {actionMenu} 
               </InlineStack>
@@ -324,7 +411,7 @@ function CampaignRow({ campaign, index, primaryDomainUrl, deleteFetcher }) {
           <>
             <IndexTable.Cell>
               <InlineStack blockAlign="center" gap="300" wrap={false}>
-                <Button variant="tertiary" onClick={() => setOpen(!open)} icon={open ? ChevronUpIcon : ChevronDownIcon} accessibilityLabel={open ? "Collapse details" : "Expand details"} />
+                <Button variant="tertiary" onClick={() => setOpen(!open)} icon={open ? ChevronUpIcon : ChevronDownIcon} />
                 <Thumbnail source={campaign.productImage || ImageIcon} alt={campaign.productTitle} size="small" />
                 <Link url={`shopify://admin/products/${numericProductId}`} target="_top" removeUnderline>
                   <Text variant="bodyMd" fontWeight="bold" as="span">{campaign.productTitle}</Text>
@@ -332,7 +419,7 @@ function CampaignRow({ campaign, index, primaryDomainUrl, deleteFetcher }) {
               </InlineStack>
             </IndexTable.Cell>
             <IndexTable.Cell>
-              <Badge size="small" tone={getStatusBadgeTone(displayStatus)}>{displayStatus}</Badge>
+              <Badge size="small" tone={getStatusBadgeTone(internalStatus)}>{displayStatus}</Badge>
             </IndexTable.Cell>
             <IndexTable.Cell>{formatDateOnly(campaign.createdAt)}</IndexTable.Cell>
             <IndexTable.Cell>
@@ -350,38 +437,37 @@ function CampaignRow({ campaign, index, primaryDomainUrl, deleteFetcher }) {
                 <BlockStack gap="400">
                   <DescriptionList
                     items={[
-                      // Inside the description list items within CampaignRow
-{ 
-  term: 'Campaign Timezone', 
-  description: (
-    <InlineStack blockAlign="center" gap="400">
-      <Text as="span">{campaign.timezone}</Text>
-      <div style={{ width: '220px' }}>
-        <Select 
-          label="Display Time In" 
-          labelHidden 
-          options={timezoneOptions} 
-          onChange={setDisplayTimezone} 
-          value={displayTimezone} // ✨ This now correctly shows the DB value on load
-        />
-      </div>
-    </InlineStack>
-  ) 
-},
-                      { term: 'Converted Start Time', description: formatForDisplay(campaign.startDateTime, displayTimezone) },
-                      { term: 'Converted End Time', description: formatForDisplay(campaign.endDateTime, displayTimezone) },
                       { 
-                        term: 'Discount Tiers', 
+                        term: translations.row.timezone, 
+                        description: (
+                          <InlineStack blockAlign="center" gap="400">
+                            <Text as="span">{campaign.timezone}</Text>
+                            <div style={{ width: '220px' }}>
+                              <Select 
+                                label={translations.row.displayTimeIn} 
+                                labelHidden 
+                                options={timezoneOptions} 
+                                onChange={setDisplayTimezone} 
+                                value={displayTimezone}
+                              />
+                            </div>
+                          </InlineStack>
+                        ) 
+                      },
+                      { term: translations.row.startTime, description: formatForDisplay(campaign.startDateTime, displayTimezone) },
+                      { term: translations.row.endTime, description: formatForDisplay(campaign.endDateTime, displayTimezone) },
+                      { 
+                        term: translations.row.discountTiers, 
                         description: tiers.length > 0 ? (
                           <InlineStack gap="200" wrap>
                             {tiers.map((tier, idx) => (
                               <Badge key={idx} tone={tierTones[idx % tierTones.length]}>
-                                {tier.quantity} {campaign.countingMethod === 'ITEM_QUANTITY' ? 'items' : 'buyers'} ➔ {tier.discount}% off
+                                {tier.quantity} {campaign.countingMethod === 'ITEM_QUANTITY' ? translations.row.items : translations.row.buyers} ➔ {tier.discount}% {translations.row.off}
                               </Badge>
                             ))}
                           </InlineStack>
                         ) : (
-                          <Text variant="bodyMd" tone="subdued">No tiers configured.</Text>
+                          <Text variant="bodyMd" tone="subdued">{translations.row.noTiers}</Text>
                         )
                       }
                     ]}
@@ -396,23 +482,21 @@ function CampaignRow({ campaign, index, primaryDomainUrl, deleteFetcher }) {
       <Modal
         open={isDeleteModalOpen}
         onClose={toggleDeleteModal}
-        title="Delete this campaign?"
+        title={translations.deleteModal.title}
         primaryAction={{
-          content: 'Delete campaign',
+          content: translations.deleteModal.confirm,
           destructive: true,
           onAction: handleDelete,
-          loading: isDeleting, // ✨ Controls the spinner on the button!
+          loading: isDeleting,
           disabled: !isConsentChecked || (deleteFetcher.state !== 'idle' && !isDeleting),
         }}
-        secondaryActions={[{ content: 'Cancel', onAction: toggleDeleteModal }]}
+        secondaryActions={[{ content: translations.deleteModal.cancel, onAction: toggleDeleteModal }]}
       >
         <Modal.Section>
-          <Text as="p">
-            This action can’t be undone. All campaign data will be permanently lost.
-          </Text>
+          <Text as="p">{translations.deleteModal.warning}</Text>
           <Box paddingBlockStart="200">
             <Checkbox
-              label="I understand this action cannot be undone."
+              label={translations.deleteModal.checkbox}
               checked={isConsentChecked}
               onChange={(newValue) => setIsConsentChecked(newValue)}
             />
@@ -424,7 +508,7 @@ function CampaignRow({ campaign, index, primaryDomainUrl, deleteFetcher }) {
 }
 
 export default function Index() {
-  const { campaigns: initialCampaigns, primaryDomainUrl, pagination } = useLoaderData();
+  const { campaigns: initialCampaigns, primaryDomainUrl, pagination, translations } = useLoaderData();
   const [hasMounted, setHasMounted] = useState(false);
   const { smDown } = useBreakpoints(); 
   
@@ -433,8 +517,8 @@ export default function Index() {
   const navigate = useNavigate(); 
   const navigation = useNavigation();
 
-  const [itemStrings] = useState(['All', 'Active', 'Processing', 'Completed']);
-  
+  // Internal keys logic for proper filtering unaffected by languages
+  const internalTabs = ['ALL', 'ACTIVE', 'PROCESSING', 'COMPLETED'];
   const [selected, setSelected] = useState(0);
   const [queryValue, setQueryValue] = useState('');
   const [sortSelected, setSortSelected] = useState(['date desc']);
@@ -465,12 +549,12 @@ export default function Index() {
     if (deleteFetcher.state === 'idle' && deleteFetcher.data) {
       const toast = app.toast;
       if (deleteFetcher.data.success) {
-        toast.show('Campaign deleted successfully.', { duration: 5000 });
+        toast.show(translations.messages.deleteSuccess, { duration: 5000 });
       } else if (deleteFetcher.data.error) {
         toast.show(deleteFetcher.data.error, { isError: true, duration: 8000 });
       }
     }
-  }, [deleteFetcher.state, deleteFetcher.data, app]);
+  }, [deleteFetcher.state, deleteFetcher.data, app, translations]);
 
   const filteredCampaigns = useMemo(() => {
     let filtered = [...initialCampaigns];
@@ -481,11 +565,11 @@ export default function Index() {
     }
 
     if (appliedFilters.selected > 0) {
-      const tabName = itemStrings[appliedFilters.selected];
+      const tabKey = internalTabs[appliedFilters.selected];
       filtered = filtered.filter(c => {
-        const status = getDisplayStatus(c);
-        if (tabName === 'Completed') return ['Successful', 'Failed'].includes(status);
-        return status === tabName;
+        const status = getInternalStatus(c);
+        if (tabKey === 'COMPLETED') return ['SUCCESSFUL', 'FAILED'].includes(status);
+        return status === tabKey;
       });
     }
 
@@ -496,7 +580,7 @@ export default function Index() {
     }
 
     return filtered;
-  }, [initialCampaigns, appliedFilters, itemStrings]);
+  }, [initialCampaigns, appliedFilters, internalTabs]);
 
   const rowMarkup = filteredCampaigns.map(
     (campaign, index) => (
@@ -506,27 +590,33 @@ export default function Index() {
         index={index}
         primaryDomainUrl={primaryDomainUrl}
         deleteFetcher={deleteFetcher}
+        translations={translations} // ✨ Pass down text
       />
     )
   );
 
   const tableHeadings = smDown 
-    ? [{ title: 'Campaigns' }] 
+    ? [{ title: translations.table.campaigns }] 
     : [
-        { title: 'Product' },
-        { title: 'Status' },
-        { title: 'Date Created' },
-        { title: 'Action' },
+        { title: translations.table.product },
+        { title: translations.table.status },
+        { title: translations.table.dateCreated },
+        { title: translations.table.action },
       ];
 
-  const tabs = itemStrings.map((item, index) => ({
+  // ✨ Map actual display text onto the index elements
+  const tabs = [
+    translations.tabs.all,
+    translations.tabs.active,
+    translations.tabs.processing,
+    translations.tabs.completed
+  ].map((item, index) => ({
     content: item,
     id: `${item}-${index}`,
     actions: [],
     isLocked: index === 0,
   }));
 
-  // ✨ RESTORED: Skeleton Rows for initial loading state
   const skeletonRows = Array.from({ length: 5 }).map((_, index) => (
     <IndexTable.Row id={`skeleton-${index}`} key={`skeleton-${index}`} position={index}>
       {smDown ? (
@@ -539,7 +629,7 @@ export default function Index() {
             </InlineStack>
             <InlineStack align="space-between" blockAlign="center" wrap>
               <Box width="60px"><SkeletonBodyText lines={1} /></Box>
-              <Button disabled disclosure>Actions</Button>
+              <Button disabled disclosure>{translations.row.actions}</Button>
             </InlineStack>
           </BlockStack>
         </IndexTable.Cell>
@@ -555,7 +645,7 @@ export default function Index() {
           <IndexTable.Cell><Box width="60px"><SkeletonBodyText lines={1} /></Box></IndexTable.Cell>
           <IndexTable.Cell><Box width="80px"><SkeletonBodyText lines={1} /></Box></IndexTable.Cell>
           <IndexTable.Cell>
-            <Button disabled disclosure>Actions</Button>
+            <Button disabled disclosure>{translations.row.actions}</Button>
           </IndexTable.Cell>
         </>
       )}
@@ -564,19 +654,19 @@ export default function Index() {
 
   return (
     <Page
-  title="Group Buy Campaigns"
-  primaryAction={{
-    content: "Create campaign",
-    url: "/app/campaigns/new",
-  }}
-  secondaryActions={[ // ✨ Add this block
-    {
-      content: "Settings",
-      icon: SettingsIcon,
-      url: "/app/settings",
-    }
-  ]}
->
+      title={translations.title}
+      primaryAction={{
+        content: translations.createCampaign,
+        url: "/app/campaigns/new",
+      }}
+      secondaryActions={[
+        {
+          content: translations.settings,
+          icon: SettingsIcon,
+          url: "/app/settings",
+        }
+      ]}
+    >
       <style>{`
         .native-fade-table .Polaris-IndexTable tbody {
           transition: opacity 250ms ease-in-out !important;
@@ -592,12 +682,12 @@ export default function Index() {
           <Card padding="0">
             <IndexFilters
               sortOptions={[
-                { label: 'Date (Newest first)', value: 'date desc', directionLabel: 'Descending' },
-                { label: 'Date (Oldest first)', value: 'date asc', directionLabel: 'Ascending' },
+                { label: translations.filters.newest, value: 'date desc', directionLabel: translations.filters.descending },
+                { label: translations.filters.oldest, value: 'date asc', directionLabel: translations.filters.ascending },
               ]}
               sortSelected={sortSelected}
               queryValue={queryValue}
-              queryPlaceholder="Search products"
+              queryPlaceholder={translations.filters.search}
               onQueryChange={setQueryValue}
               onQueryClear={() => setQueryValue('')}
               onSort={setSortSelected}
@@ -626,11 +716,11 @@ export default function Index() {
               </IndexTable>
             ) : initialCampaigns.length === 0 ? (
               <EmptyState
-                heading="Manage your group buy campaigns"
-                action={{ content: 'Create campaign', url: '/app/campaigns/new' }}
+                heading={translations.emptyState.heading}
+                action={{ content: translations.createCampaign, url: '/app/campaigns/new' }}
                 image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
               >
-                <p>Create your first campaign to start offering group buy discounts to your customers.</p>
+                <p>{translations.emptyState.description}</p>
               </EmptyState>
             ) : (
               <div className={`native-fade-table ${isBusy ? 'is-busy' : ''}`}>
@@ -638,23 +728,22 @@ export default function Index() {
                   itemCount={filteredCampaigns.length}
                   headings={tableHeadings}
                   selectable={false}
+                  emptyState={
+                    <EmptySearchResult
+                      title={translations.searchEmpty.title}
+                      description={translations.searchEmpty.description}
+                      withIllustration
+                    />
+                  }
                   pagination={{
                     hasNext: pagination.hasNextPage,
                     hasPrevious: pagination.hasPreviousPage,
                     onNext: () => navigate(`?page=${pagination.page + 1}`),
                     onPrevious: () => navigate(`?page=${pagination.page - 1}`),
-                    label: `Page ${pagination.page} of ${pagination.totalPages}`,
+                    label: translations.paginationLabel, // ✨ Replaces the hardcoded "Page 1 of 1"
                   }}
                 >
-                  {filteredCampaigns.length === 0 ? (
-                    <IndexTable.Row>
-                      <IndexTable.Cell colSpan={4}>
-                        <Box padding="400" textAlign="center">
-                          <Text tone="subdued">No campaigns match your filter.</Text>
-                        </Box>
-                      </IndexTable.Cell>
-                    </IndexTable.Row>
-                  ) : rowMarkup}
+                  {rowMarkup}
                 </IndexTable>
               </div>
             )}

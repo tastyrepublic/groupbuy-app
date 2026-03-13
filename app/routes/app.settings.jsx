@@ -15,10 +15,12 @@ import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { useAppBridge } from "@shopify/app-bridge-react";
 
+// ✨ 1. Import your new i18n utility
+import { getI18n } from "../utils/i18n.server.js";
+
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
   
-  // Fetch settings for the current shop (defaulting if none exist)
   let settings = await db.settings.findUnique({
     where: { shop: session.shop },
   });
@@ -30,7 +32,31 @@ export const loader = async ({ request }) => {
     };
   }
 
-  return json({ settings });
+  // ✨ 2. Fetch translations on the server
+  const { t } = await getI18n(request);
+
+  // ✨ 3. Package the translated strings into the loader data
+  // (I've added English fallbacks here just in case your JSON files aren't perfectly set up yet)
+  const translations = {
+    title: t("Settings.title", "Settings"),
+    saveButton: t("Settings.save", "Save"),
+    toastSaved: t("Settings.saved", "Settings saved"),
+    inventory: {
+      title: t("Settings.inventory.title", "Inventory Automation"),
+      desc: t("Settings.inventory.description", "Automatically update product inventory settings when group buy campaigns start or end."),
+      enableLabel: t("Settings.inventory.enableLabel", "Enable 'Continue selling when out of stock' on campaign creation"),
+      enableHelp: t("Settings.inventory.enableHelp", "Ensures customers can join the group buy even if physical inventory is zero."),
+      disableLabel: t("Settings.inventory.disableLabel", "Disable 'Continue selling' when campaign ends or is deleted"),
+      disableHelp: t("Settings.inventory.disableHelp", "Reverts the product to its original inventory behavior once the campaign is inactive.")
+    },
+    future: {
+      title: t("Settings.future.title", "Future Upgrades"),
+      desc: t("Settings.future.description", "Manage experimental features and future app enhancements."),
+      text: t("Settings.future.text", "New beta features and automation settings will appear here in future updates.")
+    }
+  };
+
+  return json({ settings, translations });
 };
 
 export const action = async ({ request }) => {
@@ -53,10 +79,9 @@ export const action = async ({ request }) => {
   return json({ success: true });
 };
 
-// app.routes.app.settings.jsx
-
 export default function SettingsPage() {
-  const { settings } = useLoaderData();
+  // ✨ 4. Extract translations from useLoaderData
+  const { settings, translations } = useLoaderData();
   const fetcher = useFetcher();
   const app = useAppBridge();
 
@@ -79,40 +104,39 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (fetcher.state === "idle" && fetcher.data?.success) {
-      app.toast.show("Settings saved");
+      app.toast.show(translations.toastSaved); // ✨ Translated Toast
     }
-  }, [fetcher.state, fetcher.data, app]);
+  }, [fetcher.state, fetcher.data, app, translations]);
 
   return (
     <Page
-      title="Settings"
+      title={translations.title} // ✨ Translated Title
       backAction={{ url: "/app" }}
       primaryAction={{
-        content: "Save",
+        content: translations.saveButton, // ✨ Translated Button
         onAction: handleSave,
         loading: fetcher.state !== "idle",
         disabled: !isDirty,
       }}
     >
-      {/* ✨ The Best Layout: Uses BlockStack for vertical rhythm and Box for responsive side-breathing */}
       <Box paddingInline={{ xs: '400', sm: '0' }} paddingBlockEnd="800">
         <BlockStack gap="500">
           <Layout>
             <Layout.AnnotatedSection
-              title="Inventory Automation"
-              description="Automatically update product inventory settings when group buy campaigns start or end."
+              title={translations.inventory.title} // ✨ Translated Text
+              description={translations.inventory.desc}
             >
               <Card>
                 <FormLayout>
                   <Checkbox
-                    label="Enable 'Continue selling when out of stock' on campaign creation"
-                    helpText="Ensures customers can join the group buy even if physical inventory is zero."
+                    label={translations.inventory.enableLabel}
+                    helpText={translations.inventory.enableHelp}
                     checked={autoContinueSelling}
                     onChange={(val) => setAutoContinueSelling(val)}
                   />
                   <Checkbox
-                    label="Disable 'Continue selling' when campaign ends or is deleted"
-                    helpText="Reverts the product to its original inventory behavior once the campaign is inactive."
+                    label={translations.inventory.disableLabel}
+                    helpText={translations.inventory.disableHelp}
                     checked={disableContinueSellingOnEnd}
                     onChange={(val) => setDisableContinueSellingOnEnd(val)}
                   />
@@ -121,13 +145,13 @@ export default function SettingsPage() {
             </Layout.AnnotatedSection>
 
             <Layout.AnnotatedSection
-              title="Future Upgrades"
-              description="Manage experimental features and future app enhancements."
+              title={translations.future.title}
+              description={translations.future.desc}
             >
               <Card>
                 <Box padding="400">
                   <Text as="p" tone="subdued">
-                    New beta features and automation settings will appear here in future updates.
+                    {translations.future.text}
                   </Text>
                 </Box>
               </Card>

@@ -1,0 +1,90 @@
+{
+  "Settings": {
+    "title": "Settings",
+    "save": "Save",
+    "saved": "Settings saved successfully",
+    "inventory": {
+      "title": "Inventory Automation",
+      "description": "Automatically update product inventory settings when group buy campaigns start or end.",
+      "enableLabel": "Enable 'Continue selling when out of stock' on campaign creation",
+      "enableHelp": "Ensures customers can join the group buy even if physical inventory is zero.",
+      "disableLabel": "Disable 'Continue selling when out of stock' when campaign ends or is deleted",
+      "disableHelp": "Reverts the product to its original inventory behavior once the campaign is inactive."
+    },
+    "future": {
+      "title": "Future Upgrades",
+      "description": "Manage experimental features and future app enhancements.",
+      "text": "New beta features and automation settings will appear here in future updates."
+    }
+  },
+  "Dashboard": {
+    "title": "Group Buy Campaigns",
+    "createCampaign": "Create campaign",
+    "settings": "Settings",
+    "tabs": {
+      "all": "All",
+      "active": "Active",
+      "processing": "Processing",
+      "completed": "Completed"
+    },
+    "status": {
+      "scheduled": "Scheduled",
+      "active": "Active",
+      "processing": "Processing",
+      "successful": "Successful",
+      "failed": "Failed",
+      "unknown": "Unknown"
+    },
+    "table": {
+      "product": "Product",
+      "status": "Status",
+      "dateCreated": "Date Created",
+      "action": "Action",
+      "campaigns": "Campaigns",
+      "empty": "No campaigns match your filter."
+    },
+    "row": {
+      "actions": "Actions",
+      "preview": "Preview on Store",
+      "viewOrders": "View Orders",
+      "edit": "Edit",
+      "delete": "Delete",
+      "timezone": "Campaign Timezone",
+      "displayTimeIn": "Display Time In",
+      "startTime": "Converted Start Time",
+      "endTime": "Converted End Time",
+      "discountTiers": "Discount Tiers",
+      "items": "items",
+      "buyers": "buyers",
+      "off": "off",
+      "noTiers": "No tiers configured."
+    },
+    "deleteModal": {
+      "title": "Delete this campaign?",
+      "confirm": "Delete campaign",
+      "cancel": "Cancel",
+      "warning": "This action can’t be undone. All campaign data will be permanently lost.",
+      "checkbox": "I understand this action cannot be undone."
+    },
+    "emptyState": {
+      "heading": "Manage your group buy campaigns",
+      "description": "Create your first campaign to start offering group buy discounts to your customers."
+    },
+    "filters": {
+      "search": "Search products",
+      "newest": "Date (Newest first)",
+      "oldest": "Date (Oldest first)",
+      "descending": "Descending",
+      "ascending": "Ascending",
+      "cancel": "Cancel"
+    },
+    "searchEmpty": {
+      "title": "No Items found",
+      "description": "Try changing the filters or search term"
+    },
+    "paginationLabel": "Page {{page}} of {{totalPages}}",
+    "messages": {
+      "deleteSuccess": "Campaign deleted successfully."
+    }
+  }
+}
