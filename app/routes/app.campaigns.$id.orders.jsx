@@ -14,12 +14,16 @@ import {
   Thumbnail,
   Select,
   Box,
-  EmptyState
+  EmptyState,
+  Divider
 } from "@shopify/polaris";
 import { StarFilledIcon, ImageIcon } from "@shopify/polaris-icons";
 import { useState } from "react";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
+
+// ✨ Import i18n utility
+import { getI18n } from "../utils/i18n.server.js";
 
 // --- LOADER ---
 
@@ -27,6 +31,9 @@ export const loader = async ({ request, params }) => {
   const { admin } = await authenticate.admin(request);
   const campaignId = parseInt(params.id, 10);
   
+  // ✨ Fetch translations
+  const { t } = await getI18n(request);
+
   const url = new URL(request.url);
   let selectedVariantId = url.searchParams.get("variantId");
 
@@ -41,7 +48,6 @@ export const loader = async ({ request, params }) => {
   const allCampaignVariantGIDs = JSON.parse(campaign.selectedVariantIdsJson || '[]');
   let allCampaignVariants = [];
 
-  // --- 1. Fetch Variant Titles for the Dropdown ---
   if (allCampaignVariantGIDs.length > 0) {
     const variantQueryRes = await admin.graphql(
       `#graphql
@@ -71,7 +77,6 @@ export const loader = async ({ request, params }) => {
 
   let participantQuery = {
     group: { campaignId: campaign.id },
-    // Notice: We intentionally do NOT filter by status here so we get the Audit Trail
   };
 
   if (campaign.scope === 'VARIANT' && fullVariantId) {
@@ -86,15 +91,15 @@ export const loader = async ({ request, params }) => {
       customerId: true, 
       quantity: true, 
       productVariantId: true,
-      status: true // ✅ NEW: Grab the database status
+      status: true
     },
   });
 
   let participantData = { count: 0, quantity: 0 };
   let rows = [];
+  let fulfillmentSummary = {};
 
   if (participants.length > 0) {
-    // --- 3. Enrich Data with Shopify Details ---
     const shopifyOrderIds = [...new Set(participants.map(p => p.orderId))];
     const shopifyVariantIds = [...new Set(participants.map(p => p.productVariantId))];
 
@@ -130,7 +135,6 @@ export const loader = async ({ request, params }) => {
       variantData.data.nodes.filter(Boolean).map(variant => [variant.id, variant])
     );
 
-    // --- 4. Combine all data into "rows" ---
     rows = participants.map(p => {
       const order = orderMap.get(p.orderId);
       const variant = variantMap.get(p.productVariantId);
@@ -145,30 +149,51 @@ export const loader = async ({ request, params }) => {
         fulfillmentStatus: order ? order.displayFulfillmentStatus : 'UNFULFILLED',
         isLeader: p.isLeader,
         quantity: p.quantity,
-        dbStatus: p.status, // ✅ NEW: Pass the DB status to the UI
+        dbStatus: p.status, 
         variantTitle: variant 
           ? (variant.title === 'Default Title' ? 'N/A' : variant.title) 
           : (p.productVariantId ? 'Variant not found' : 'N/A')
       };
     });
 
-    // ✅ NEW: The exact math fix! Only count ACTIVE orders for the progress bar
-    const activeParticipants = participants.filter(p => p.status === 'ACTIVE');
+    const activeParticipants = participants.filter(p => p.status === 'ACTIVE' || p.status === 'SUCCESSFUL');
     
     participantData = {
       count: new Set(activeParticipants.map(p => p.customerId)).size,
       quantity: activeParticipants.reduce((sum, p) => sum + p.quantity, 0)
     };
+
+    activeParticipants.forEach(p => {
+      const variant = variantMap.get(p.productVariantId);
+      if (variant) {
+        if (!fulfillmentSummary[variant.id]) {
+          fulfillmentSummary[variant.id] = {
+            title: variant.title === 'Default Title' ? 'Standard' : variant.title,
+            totalActive: 0
+          };
+        }
+        fulfillmentSummary[variant.id].totalActive += p.quantity;
+      }
+    });
   }
 
-  return json({ campaign, rows, allCampaignVariants, participantData });
+  const translations = {
+    title: t("Orders.title", { productTitle: campaign.productTitle, defaultValue: `Orders for "${campaign.productTitle}"` }),
+    back: t("Orders.back", "Campaigns"),
+    ProductDetails: t("Orders.ProductDetails", { returnObjects: true }),
+    FulfillmentSummary: t("Orders.FulfillmentSummary", { returnObjects: true }),
+    CampaignProgress: t("Orders.CampaignProgress", { returnObjects: true }),
+    ParticipantOrders: t("Orders.ParticipantOrders", { returnObjects: true })
+  };
+
+  return json({ campaign, rows, allCampaignVariants, participantData, fulfillmentSummary, translations });
 };
 
 
 // --- PAGE COMPONENT ---
 
 export default function CampaignOrdersPage() {
-  const { campaign, rows, allCampaignVariants, participantData } = useLoaderData();
+  const { campaign, rows, allCampaignVariants, participantData, fulfillmentSummary, translations } = useLoaderData();
   const navigate = useNavigate();
   
   const [selectedVariantId, setSelectedVariantId] = useState(() => {
@@ -185,13 +210,14 @@ export default function CampaignOrdersPage() {
   };
 
   const variantOptions = allCampaignVariants.map(v => ({
-    label: v.title === 'Default Title' ? 'Standard Product' : v.title,
+    label: v.title === 'Default Title' ? translations.ProductDetails.standardProduct : v.title,
     value: v.id,
   }));
   
   const getBadgeTone = (status) => {
     switch (status) {
       case 'PAID': return 'success';
+      case 'PENDING': return 'warning'; // ✨ Added this line for the orange badge!
       case 'AUTHORIZED': return 'attention';
       case 'VOIDED': return 'critical';
       default: return 'default';
@@ -207,38 +233,37 @@ export default function CampaignOrdersPage() {
     }
   };
 
-  // --- CAMPAIGN STATUS LOGIC ---
-  const getDisplayStatus = (campaign) => {
+  const getDisplayStatusRaw = (campaign) => {
     if (campaign.status === 'SUCCESSFUL' || campaign.status === 'FAILED') {
-      return campaign.status.charAt(0).toUpperCase() + campaign.status.slice(1).toLowerCase();
+      return campaign.status.toLowerCase();
     }
     const now = new Date();
     const startTime = new Date(campaign.startDateTime);
     const endTime = new Date(campaign.endDateTime);
 
-    if (now < startTime) return 'Scheduled';
+    if (now < startTime) return 'scheduled';
     if (now >= startTime && now < endTime) {
-      if (campaign.status === 'PROCESSING') return 'Processing';
-      return 'Active';
+      if (campaign.status === 'PROCESSING') return 'processing';
+      return 'active';
     }
-    if (now >= endTime) return 'Processing';
-    return 'Unknown';
+    if (now >= endTime) return 'processing';
+    return 'unknown';
   };
 
-  const getStatusBadgeTone = (status) => {
-    switch (status) {
-      case 'Active': return 'info';
-      case 'Processing': return 'warning';
-      case 'Successful': return 'success';
-      case 'Failed': return 'critical';
-      case 'Scheduled': return 'attention';
+  const rawStatus = getDisplayStatusRaw(campaign);
+  const translatedStatus = translations.CampaignProgress.status[rawStatus] || rawStatus.toUpperCase();
+
+  const getStatusBadgeTone = (statusKey) => {
+    switch (statusKey) {
+      case 'active': return 'info';
+      case 'processing': return 'warning';
+      case 'successful': return 'success';
+      case 'failed': return 'critical';
+      case 'scheduled': return 'attention';
       default: return 'default';
     }
   };
-
-  const displayStatus = getDisplayStatus(campaign);
   
-  // --- ✅ NEW: TIER-STAGE PROGRESS BAR LOGIC ---
   const fakeCount = campaign.startingParticipants || 0;
   const realCount = campaign.countingMethod === 'ITEM_QUANTITY' 
     ? participantData.quantity 
@@ -246,8 +271,8 @@ export default function CampaignOrdersPage() {
   const totalProgress = realCount + fakeCount;
 
   const progressLabel = campaign.countingMethod === 'ITEM_QUANTITY' 
-    ? (campaign.scope === 'VARIANT' ? 'Variant Items Sold' : 'Total Items Sold') 
-    : (campaign.scope === 'VARIANT' ? 'Variant Participants' : 'Total Participants');
+    ? (campaign.scope === 'VARIANT' ? translations.CampaignProgress.progressLabels.variantItems : translations.CampaignProgress.progressLabels.totalItems) 
+    : (campaign.scope === 'VARIANT' ? translations.CampaignProgress.progressLabels.variantParticipants : translations.CampaignProgress.progressLabels.totalParticipants);
 
   const tiers = JSON.parse(campaign.tiersJson || '[]');
   const sortedTiers = [...tiers].sort((a, b) => Number(a.quantity) - Number(b.quantity));
@@ -258,12 +283,10 @@ export default function CampaignOrdersPage() {
   let finalDiscountTier = null;
 
   if (sortedTiers.length > 0) {
-    // 1. Set the absolute highest tier as the 100% mark of the visual bar
     const finalGoalTier = sortedTiers[sortedTiers.length - 1];
     maxGoal = Number(finalGoalTier.quantity);
     
     if (maxGoal > 0) {
-      // 2. Cap the visual fill at 100% so it doesn't break out of the UI if they over-sell
       const cappedReal = Math.min(realCount, maxGoal);
       const cappedFake = Math.min(fakeCount, maxGoal - cappedReal);
       
@@ -271,18 +294,16 @@ export default function CampaignOrdersPage() {
       fakePercent = (cappedFake / maxGoal) * 100;
     }
     
-    // 3. Find out what tier they have officially unlocked
     const achievedTiers = [...tiers].sort((a, b) => Number(b.quantity) - Number(a.quantity));
     finalDiscountTier = achievedTiers.find(tier => totalProgress >= Number(tier.quantity));
   }
   
   const progressText = `${totalProgress} / ${maxGoal > 0 ? maxGoal : '∞'}`;
-  const scopeLabel = campaign.scope === 'PRODUCT' ? 'Product-wide' : 'Per-Variant';
-  const countingLabel = campaign.countingMethod === 'ITEM_QUANTITY' ? 'By Item Quantity' : 'By Participants';
-  // --- END TIER-STAGE LOGIC ---
+  
+  const scopeLabel = campaign.scope === 'PRODUCT' ? translations.CampaignProgress.values.productWide : translations.CampaignProgress.values.perVariant;
+  const countingLabel = campaign.countingMethod === 'ITEM_QUANTITY' ? translations.CampaignProgress.values.byItem : translations.CampaignProgress.values.byParticipant;
 
   const rowMarkup = rows.map((row, index) => {
-    // ✅ Check if the order is dead in our DB OR voided in Shopify
     const isCancelled = row.dbStatus === 'CANCELLED' || ['VOIDED', 'REFUNDED', 'PARTIALLY_REFUNDED'].includes(row.paymentStatus);
     const rowStyle = isCancelled ? { opacity: 0.5, backgroundColor: 'var(--p-color-bg-surface-secondary)' } : {};
 
@@ -305,38 +326,41 @@ export default function CampaignOrdersPage() {
         <IndexTable.Cell><div style={rowStyle}>{row.customerName}</div></IndexTable.Cell>
         <IndexTable.Cell>
           <div style={rowStyle}>
-            <Text as="span" fontWeight={isCancelled ? "regular" : "semibold"} tone={isCancelled ? "subdued" : "base"}>{row.variantTitle}</Text>
+            <Text as="span" fontWeight={isCancelled ? "regular" : "semibold"} tone={isCancelled ? "subdued" : "base"}>
+               {row.variantTitle === 'Default Title' ? translations.ProductDetails.standardProduct : row.variantTitle}
+            </Text>
           </div>
         </IndexTable.Cell>
         <IndexTable.Cell><div style={rowStyle}>{row.quantity}</div></IndexTable.Cell>
         <IndexTable.Cell>
           <div style={rowStyle}>
-            {/* ✅ Override role with a "Canceled" badge if the order is dead */}
             {isCancelled ? (
-               <Badge tone="critical">Canceled</Badge>
+               <Badge tone="critical">{translations.ParticipantOrders.roles.canceled}</Badge>
             ) : row.isLeader ? (
               <BlockStack gap="100">
-                <Badge tone="success" icon={StarFilledIcon}>Leader</Badge>
+                <Badge tone="success" icon={StarFilledIcon}>{translations.ParticipantOrders.roles.leader}</Badge>
                 {campaign.leaderDiscount > 0 && (
-                   <Text variant="bodySm" tone="subdued">{campaign.leaderDiscount}% off</Text>
+                   <Text variant="bodySm" tone="subdued">{campaign.leaderDiscount}% {translations.CampaignProgress.off}</Text>
                 )}
               </BlockStack>
             ) : (
-              <Text variant="bodySm" tone="subdued">Member</Text>
+              <Text variant="bodySm" tone="subdued">{translations.ParticipantOrders.roles.member}</Text>
             )}
           </div>
         </IndexTable.Cell>
         <IndexTable.Cell>
           <div style={rowStyle}>
+            {/* ✨ Translated Payment Status Badge */}
             <Badge tone={getBadgeTone(row.paymentStatus)}>
-              {row.paymentStatus.replace('_', ' ')}
+              {translations.ParticipantOrders.badges?.payment?.[row.paymentStatus] || row.paymentStatus.replace('_', ' ')}
             </Badge>
           </div>
         </IndexTable.Cell>
         <IndexTable.Cell>
           <div style={rowStyle}>
+            {/* ✨ Translated Fulfillment Status Badge */}
             <Badge tone={getFulfillmentBadgeTone(row.fulfillmentStatus)}>
-              {row.fulfillmentStatus.replace('_', ' ')}
+              {translations.ParticipantOrders.badges?.fulfillment?.[row.fulfillmentStatus] || row.fulfillmentStatus.replace('_', ' ')}
             </Badge>
           </div>
         </IndexTable.Cell>
@@ -345,62 +369,88 @@ export default function CampaignOrdersPage() {
   });
 
   const activeVariant = allCampaignVariants.find(v => v.id === selectedVariantId) || allCampaignVariants[0];
+  const fulfillmentItems = Object.values(fulfillmentSummary);
 
   return (
     <Page
-      title={`Orders for "${campaign.productTitle}"`}
-      backAction={{ content: 'Campaigns', url: '/app' }}
+      title={translations.title}
+      backAction={{ content: translations.back, url: '/app' }}
     >
       <Layout>
-        {/* --- CARD 1: PRODUCT DETAILS --- */}
+        {/* --- LEFT COLUMN --- */}
         <Layout.Section variant="oneThird">
-          <Card>
-            <BlockStack gap="400">
-              <Text as="h2" variant="headingMd">Product Details</Text>
-              <Box paddingBlockStart="200" paddingBlockEnd="200">
-                <InlineStack blockAlign="center" gap="400" wrap={false}>
-                  <Thumbnail 
-                    source={campaign.productImage || ImageIcon} 
-                    alt={campaign.productTitle} 
-                    size="large"
-                  />
-                  {/* ✅ NEW: Stacked the title and price together */}
-                  <BlockStack gap="100">
-                    <Text as="span" variant="bodyLg" fontWeight="bold">
-                      {campaign.productTitle}
-                    </Text>
-                    {activeVariant?.price && (
-                      <Text as="span" variant="bodyMd" tone="subdued">
-                        Retail Price: {activeVariant.price}
+          <BlockStack gap="400">
+            <Card>
+              <BlockStack gap="400">
+                <Text as="h2" variant="headingMd">{translations.ProductDetails.title}</Text>
+                <Box paddingBlockStart="200" paddingBlockEnd="200">
+                  <InlineStack blockAlign="center" gap="400" wrap={false}>
+                    <Thumbnail 
+                      source={campaign.productImage || ImageIcon} 
+                      alt={campaign.productTitle} 
+                      size="large"
+                    />
+                    <BlockStack gap="100">
+                      <Text as="span" variant="bodyLg" fontWeight="bold">
+                        {campaign.productTitle}
                       </Text>
-                    )}
-                  </BlockStack>
-                </InlineStack>
-              </Box>
-              
-              {campaign.scope === 'VARIANT' && variantOptions.length > 0 && (
-                <Box paddingBlockStart="200">
-                  <Select
-                    label="Filter by Variant"
-                    options={variantOptions}
-                    onChange={handleVariantChange}
-                    value={selectedVariantId}
-                  />
+                      {activeVariant?.price && (
+                        <Text as="span" variant="bodyMd" tone="subdued">
+                          {translations.ProductDetails.retailPrice} {activeVariant.price}
+                        </Text>
+                      )}
+                    </BlockStack>
+                  </InlineStack>
                 </Box>
-              )}
-            </BlockStack>
-          </Card>
+                
+                {campaign.scope === 'VARIANT' && variantOptions.length > 0 && (
+                  <Box paddingBlockStart="200">
+                    <Select
+                      label={translations.ProductDetails.filterVariant}
+                      options={variantOptions}
+                      onChange={handleVariantChange}
+                      value={selectedVariantId}
+                    />
+                  </Box>
+                )}
+              </BlockStack>
+            </Card>
+
+            <Card>
+              <BlockStack gap="400">
+                <Text as="h2" variant="headingMd">{translations.FulfillmentSummary.title}</Text>
+                <Text as="p" tone="subdued">{translations.FulfillmentSummary.description}</Text>
+                <Divider />
+                
+                {fulfillmentItems.length > 0 ? (
+                  <BlockStack gap="200">
+                    {fulfillmentItems.map((item, index) => (
+                      <InlineStack key={index} align="space-between" wrap={false}>
+                        <Text as="span" variant="bodyMd">
+                          {item.title === 'Standard' ? translations.ProductDetails.standardProduct : item.title}
+                        </Text>
+                        <Text as="span" fontWeight="bold">
+                          {item.totalActive} {translations.FulfillmentSummary.items}
+                        </Text>
+                      </InlineStack>
+                    ))}
+                  </BlockStack>
+                ) : (
+                  <Text tone="subdued">{translations.FulfillmentSummary.empty}</Text>
+                )}
+              </BlockStack>
+            </Card>
+          </BlockStack>
         </Layout.Section>
 
-        {/* --- CARD 2: CAMPAIGN DETAILS --- */}
+        {/* --- RIGHT COLUMN --- */}
         <Layout.Section variant="twoThirds">
           <Card>
             <BlockStack gap="400">
-              {/* ✅ THE NEW HEADER WITH BADGE */}
               <InlineStack align="space-between" blockAlign="center">
-                <Text as="h2" variant="headingMd">Campaign Progress</Text>
-                <Badge tone={getStatusBadgeTone(displayStatus)} size="medium">
-                  {displayStatus}
+                <Text as="h2" variant="headingMd">{translations.CampaignProgress.title}</Text>
+                <Badge tone={getStatusBadgeTone(rawStatus)} size="medium">
+                  {translatedStatus}
                 </Badge>
               </InlineStack>
               
@@ -415,9 +465,7 @@ export default function CampaignOrdersPage() {
                     </Text>
                   </InlineStack>
                   
-                  {/* ✅ NEW: Seamless Segmented Bar (8px Height + Perfect Gaps) */}
                   <div style={{ display: 'flex', width: '100%', marginTop: '10px', marginBottom: '12px' }}>
-                    
                     {maxGoal > 0 && sortedTiers.map((tier, index) => {
                       const previousTierQty = index === 0 ? 0 : Number(sortedTiers[index - 1].quantity);
                       const tierGoal = Number(tier.quantity);
@@ -439,29 +487,24 @@ export default function CampaignOrdersPage() {
                           flex: tierCapacity, 
                           display: 'flex', 
                           flexDirection: 'column',
-                          // ✅ THE GAP FIX: Use a solid 2px white border on the right side of every block (except the last one)
                           borderRight: isLast ? 'none' : '2px solid white' 
                         }}>
                           
-                          {/* The Segment */}
                           <div style={{ 
                             width: '100%', 
-                            height: '8px', // ✅ THE HEIGHT FIX: Back to the original 8px!
+                            height: '8px', 
                             backgroundColor: 'var(--p-color-bg-surface-secondary-active, #e3e3e3)', 
-                            borderTopLeftRadius: isFirst ? '4px' : '0', // Adjusted to match 8px height
+                            borderTopLeftRadius: isFirst ? '4px' : '0',
                             borderBottomLeftRadius: isFirst ? '4px' : '0',
                             borderTopRightRadius: isLast ? '4px' : '0',
                             borderBottomRightRadius: isLast ? '4px' : '0',
                             display: 'flex', 
                             overflow: 'hidden' 
                           }}>
-                            {/* Real Count Fill */}
                             <div style={{ width: `${realPercent}%`, backgroundColor: 'var(--p-color-bg-fill-info, #005bd3)', transition: 'width 0.3s ease' }} />
-                            {/* Fake Count Fill */}
                             <div style={{ width: `${fakePercent}%`, backgroundColor: 'var(--p-color-bg-surface-info, #91c0ff)', transition: 'width 0.3s ease' }} />
                           </div>
 
-                          {/* The Label */}
                           <div style={{ marginTop: '8px', textAlign: 'center' }}>
                             <span style={{ 
                               display: 'block',
@@ -470,7 +513,7 @@ export default function CampaignOrdersPage() {
                               fontWeight: 'bold', 
                               color: isAchieved ? '#2ecc71' : 'var(--p-color-text-subdued, #8a8a8a)'
                             }}>
-                              {tier.discount}% off
+                              {tier.discount}% {translations.CampaignProgress.off}
                             </span>
                             <Text variant="bodyXs" tone="subdued">{tier.quantity}</Text>
                           </div>
@@ -480,16 +523,15 @@ export default function CampaignOrdersPage() {
                     })}
                   </div>
                   
-                  {/* Mini Legend */}
                   <InlineStack gap="300">
                     <InlineStack gap="100" blockAlign="center">
                       <div style={{ width: '8px', height: '8px', borderRadius: '2px', backgroundColor: 'var(--p-color-bg-fill-info, #005bd3)' }} />
-                      <Text as="span" variant="bodySm" tone="subdued">Real Orders ({realCount})</Text>
+                      <Text as="span" variant="bodySm" tone="subdued">{translations.CampaignProgress.realOrders} ({realCount})</Text>
                     </InlineStack>
                     {fakeCount > 0 && (
                       <InlineStack gap="100" blockAlign="center">
                         <div style={{ width: '8px', height: '8px', borderRadius: '2px', backgroundColor: 'var(--p-color-bg-surface-info, #91c0ff)' }} />
-                        <Text as="span" variant="bodySm" tone="subdued">Fake Count ({fakeCount})</Text>
+                        <Text as="span" variant="bodySm" tone="subdued">{translations.CampaignProgress.fakeCount} ({fakeCount})</Text>
                       </InlineStack>
                     )}
                   </InlineStack>
@@ -498,21 +540,21 @@ export default function CampaignOrdersPage() {
 
               <DescriptionList
                 items={[
-                  { term: 'Campaign Scope', description: scopeLabel },
-                  { term: 'Counting Method', description: countingLabel },
-                  { term: 'Leader Discount', description: campaign.leaderDiscount > 0 ? `${campaign.leaderDiscount}% off` : 'Disabled' },
-                  { term: 'Discount Achieved', description: finalDiscountTier ? `${finalDiscountTier.discount}% off` : 'None (Goal not met)' },
+                  { term: translations.CampaignProgress.terms.scope, description: scopeLabel },
+                  { term: translations.CampaignProgress.terms.countingMethod, description: countingLabel },
+                  { term: translations.CampaignProgress.terms.leaderDiscount, description: campaign.leaderDiscount > 0 ? `${campaign.leaderDiscount}% ${translations.CampaignProgress.off}` : translations.CampaignProgress.values.disabled },
+                  { term: translations.CampaignProgress.terms.discountAchieved, description: finalDiscountTier ? `${finalDiscountTier.discount}% ${translations.CampaignProgress.off}` : translations.CampaignProgress.values.noneMet },
                 ]}
               />
             </BlockStack>
           </Card>
         </Layout.Section>
 
-        {/* --- CARD 3: ORDERS TABLE --- */}
+        {/* --- BOTTOM ROW: ORDERS TABLE --- */}
         <Layout.Section>
           <Card padding="0">
             <Box padding="400" paddingBlockEnd="0">
-              <Text as="h2" variant="headingMd">Participant Orders</Text>
+              <Text as="h2" variant="headingMd">{translations.ParticipantOrders.title}</Text>
             </Box>
             
             {rows.length > 0 ? (
@@ -520,14 +562,14 @@ export default function CampaignOrdersPage() {
                 <IndexTable
                   itemCount={rows.length}
                   headings={[
-                    { title: 'Order' },
-                    { title: 'Date' },
-                    { title: 'Customer' },
-                    { title: 'Variant' },
-                    { title: 'Qty' },
-                    { title: 'Role' },
-                    { title: 'Payment' },
-                    { title: 'Fulfillment' },
+                    { title: translations.ParticipantOrders.table.order },
+                    { title: translations.ParticipantOrders.table.date },
+                    { title: translations.ParticipantOrders.table.customer },
+                    { title: translations.ParticipantOrders.table.variant },
+                    { title: translations.ParticipantOrders.table.qty },
+                    { title: translations.ParticipantOrders.table.role },
+                    { title: translations.ParticipantOrders.table.payment },
+                    { title: translations.ParticipantOrders.table.fulfillment },
                   ]}
                   selectable={false}
                 >
@@ -537,12 +579,12 @@ export default function CampaignOrdersPage() {
             ) : (
               <Box padding="800">
                 <EmptyState
-                  heading="No orders found"
+                  heading={translations.ParticipantOrders.empty.title}
                   image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
                 >
                   <p>
-                    There are currently no orders for this campaign
-                    {campaign.scope === 'VARIANT' ? ' for the selected variant.' : '.'}
+                    {translations.ParticipantOrders.empty.descBase}
+                    {campaign.scope === 'VARIANT' ? translations.ParticipantOrders.empty.descVariant : '.'}
                   </p>
                 </EmptyState>
               </Box>

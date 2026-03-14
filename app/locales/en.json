@@ -102,7 +102,9 @@
         "scopeProduct": "Entire Product (All Variants)",
         "scopeVariant": "Specific Variants Only",
         "selectedVariants": "{{count}} variants selected",
-        "noProduct": "No product selected"
+        "noProduct": "No product selected",
+        "scopeProductTooltip": "The discount target applies to total sales across all variants combined.",
+        "scopeVariantTooltip": "Each variant must reach the target individually to unlock the discount."
       },
       "schedule": {
         "title": "Schedule & Timezone",
@@ -120,8 +122,32 @@
         "addTier": "Add Tier",
         "tierTarget": "Target (Items/Buyers)",
         "tierDiscount": "Discount (%)",
-        "remove": "Remove"
+        "remove": "Remove",
+        "tierPrefix": "Tier",
+        "countBuyersTooltip": "Progress increases by 1 for each unique customer's order and repeat customer in same campaign won't count, regardless of how many items they buy.",
+        "countItemsTooltip": "Progress increases based on the actual quantity of items purchased."
+      },
+      "features": {
+        "title": "Features",
+        "note": "Note: Leader Discount and Fake Count cannot be used simultaneously. Enabling one will automatically turn off the other.",
+        "leaderLabel": "Leader discount (%)",
+        "leaderDetails": "First participants will receive a discount when they join a group buy.",
+        "startingParticipantsLabel": "Starting participants (fake count)",
+        "startingItemsLabel": "Starting items sold (fake count)",
+        "startingParticipantsDetails": "Sets a starting number of participants to make the group buy look more popular.",
+        "startingItemsDetails": "Sets a starting number of items sold to make the group buy look more popular."
       }
+    },
+    "notes": {
+      "editTitle": "Manage Your Campaign",
+      "createLockWarning": "Note: The product and campaign type will be locked after creation.",
+      "editDate": "You can adjust the campaign's end date at any time.",
+      "editLockWarning": "Tiers and features are locked once the campaign starts or participants join.",
+      "editProductWarning": "The selected product and campaign type cannot be changed.",
+      "currentTime": "Current time in",
+      "is": "is",
+      "singleProductWarning": "You can only select variants from a single product for each campaign.",
+      "removeAll": "Remove all"
     },
     "errors": {
       "noProduct": "Please select a product.",
@@ -134,6 +160,111 @@
     },
     "messages": {
       "success": "Campaign created successfully!"
+    }
+  },
+  "EditCampaign": {
+    "title": "Edit Campaign",
+    "errors": {
+      "noProduct": "Please select a product.",
+      "noVariants": "Please select at least one variant.",
+      "invalidDates": "End date must be after start date.",
+      "pastDates": "Start date cannot be in the past.",
+      "noTiers": "Please add at least one discount tier.",
+      "invalidTiers": "Please fill out all tier fields correctly.",
+      "tierOrder": "Tiers must be in ascending order."
+    },
+    "messages": {
+      "success": "Campaign created successfully!",
+      "saved": "Campaign saved successfully",
+      "error": "Please review the errors on the form"
+    }
+  },
+  "Orders": {
+    "title": "Orders for \"{{productTitle}}\"",
+    "back": "Campaigns",
+    "ProductDetails": {
+      "title": "Product Details",
+      "retailPrice": "Retail Price:",
+      "filterVariant": "Filter by Variant",
+      "standardProduct": "Standard Product"
+    },
+    "FulfillmentSummary": {
+      "title": "Fulfillment Summary",
+      "description": "Total active items ordered that will need to be fulfilled.",
+      "items": "items",
+      "empty": "No active items to fulfill."
+    },
+    "CampaignProgress": {
+      "title": "Campaign Progress",
+      "progressLabels": {
+        "variantItems": "Variant Items Sold",
+        "totalItems": "Total Items Sold",
+        "variantParticipants": "Variant Participants",
+        "totalParticipants": "Total Participants"
+      },
+      "status": {
+        "scheduled": "Scheduled",
+        "active": "Active",
+        "processing": "Processing",
+        "successful": "Successful",
+        "failed": "Failed",
+        "unknown": "Unknown"
+      },
+      "off": "off",
+      "realOrders": "Real Orders",
+      "fakeCount": "Fake Count",
+      "terms": {
+        "scope": "Campaign Scope",
+        "countingMethod": "Counting Method",
+        "leaderDiscount": "Leader Discount",
+        "discountAchieved": "Discount Achieved"
+      },
+      "values": {
+        "productWide": "Product-wide",
+        "perVariant": "Per-Variant",
+        "byItem": "By Item Quantity",
+        "byParticipant": "By Participants",
+        "disabled": "Disabled",
+        "noneMet": "None (Goal not met)"
+      }
+    },
+    "ParticipantOrders": {
+      "title": "Participant Orders",
+      "table": {
+        "order": "Order",
+        "date": "Date",
+        "customer": "Customer",
+        "variant": "Variant",
+        "qty": "Qty",
+        "role": "Role",
+        "payment": "Payment",
+        "fulfillment": "Fulfillment"
+      },
+      "roles": {
+        "leader": "Leader",
+        "member": "Member",
+        "canceled": "Canceled"
+      },
+      "badges": {
+        "payment": {
+          "PENDING": "Pending",
+          "AUTHORIZED": "Authorized",
+          "PAID": "Paid",
+          "PARTIALLY_REFUNDED": "Partially Refunded",
+          "REFUNDED": "Refunded",
+          "VOIDED": "Voided"
+        },
+        "fulfillment": {
+          "UNFULFILLED": "Unfulfilled",
+          "PARTIALLY_FULFILLED": "Partially Fulfilled",
+          "FULFILLED": "Fulfilled"
+        }
+      },
+      "empty": {
+        "title": "No orders found",
+        "descBase": "There are currently no orders for this campaign",
+        "descVariant": " for the selected variant."
+      }
     }
   }
 }

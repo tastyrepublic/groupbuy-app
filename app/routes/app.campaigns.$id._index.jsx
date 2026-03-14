@@ -10,11 +10,15 @@ import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { validateTiers } from "../components/validation";
 
-// ✅ Replace your existing loader with this complete and future-proof version
+// ✨ 1. Import i18n utility
+import { getI18n } from "../utils/i18n.server.js";
 
 export const loader = async ({ request, params }) => {
   const { admin } = await authenticate.admin(request);
   const campaignId = parseInt(params.id, 10);
+  
+  // ✨ 2. Fetch translations
+  const { t } = await getI18n(request);
 
   const campaign = await db.campaign.findUnique({ where: { id: campaignId } });
   if (!campaign) { throw new Response("Campaign Not Found", { status: 404 }); }
@@ -46,7 +50,6 @@ export const loader = async ({ request, params }) => {
                 product {
                   id
                   title
-                  # ✅ UPDATED: Use 'media' on the parent product as well
                   media(first: 1) {
                     edges {
                       node {
@@ -68,7 +71,6 @@ export const loader = async ({ request, params }) => {
       const { data } = await response.json();
 
       selectedProducts = data.nodes.filter(Boolean).map(variant => {
-        // Safely get the URLs using the new structure for both
         const variantImageUrl = variant.media?.edges[0]?.node.image?.url;
         const productImageUrl = variant.product.media?.edges[0]?.node.image?.url;
 
@@ -77,7 +79,7 @@ export const loader = async ({ request, params }) => {
           variantId: variant.id,
           title: variant.product.title,
           variantTitle: variant.title,
-          image: variantImageUrl || productImageUrl || '', // Fallback logic is now consistent
+          image: variantImageUrl || productImageUrl || '',
         };
       });
     }
@@ -92,12 +94,21 @@ export const loader = async ({ request, params }) => {
   const version = url.searchParams.get("v");
   const participantCount = 0;
 
-  return json({ campaign: initialData, participantCount, version });
+  // ✨ 3. Package the translations for the Edit page
+  const translations = {
+    title: t("EditCampaign.title", "Edit campaign"),
+    campaignsLabel: t("Dashboard.title", "Group Buy Campaigns"),
+    save: t("Settings.save", "Save"),
+    discard: t("CreateCampaign.back", "Discard"),
+    toastError: t("EditCampaign.messages.error", "Please review the errors on the form"),
+    toastSuccess: t("EditCampaign.messages.saved", "Campaign saved successfully"),
+    form: t("CreateCampaign", { returnObjects: true }) // Reuse the massive form dictionary!
+  };
+
+  return json({ campaign: initialData, participantCount, version, translations });
 };
 
-// ✅ Corrected and improved action function
 export const action = async ({ request, params }) => {
-  // ✅ 1. ADDED 'admin' here so we can run GraphQL!
   const { session, admin } = await authenticate.admin(request);
   const formData = await request.formData();
   const campaignId = parseInt(params.id, 10);
@@ -105,14 +116,13 @@ export const action = async ({ request, params }) => {
   const campaign = await db.campaign.findUnique({ where: { id: campaignId } });
   if (!campaign) { throw new Response("Not Found", { status: 404 }); }
 
-  const participantCount = 0; // Replace with your actual participant logic if needed
+  const participantCount = 0; 
   const isStarted = new Date(campaign.startDateTime) < new Date();
   const hasParticipants = participantCount > 0;
   const errors = { tiers: [], schedule: {}, leaderDiscount: null };
 
   const dataToUpdate = {};
 
-  // --- Handle the array of selected variants ---
   const selectedVariantIdsJson = formData.get("selectedVariantIdsJson");
   if (selectedVariantIdsJson) {
     const selectedVariantIds = JSON.parse(selectedVariantIdsJson);
@@ -126,7 +136,6 @@ export const action = async ({ request, params }) => {
     }
   }
 
-  // --- Regular validation logic ---
   if (!hasParticipants) {
     const leaderDiscount = parseInt(formData.get("leaderDiscount"), 10);
     if (isNaN(leaderDiscount) || leaderDiscount < 0 || leaderDiscount > 100) { errors.leaderDiscount = 'Must be 0-100.'; }
@@ -140,39 +149,33 @@ export const action = async ({ request, params }) => {
     dataToUpdate.countingMethod = formData.get("countingMethod");
   }
 
-  // 1. Keep Start Date protected (cannot change once started)
-if (!isStarted) {
-  const campaignTimezone = formData.get("timezone");
-  const startDateTimeUtc = toDate(formData.get("startDate"), { timeZone: campaignTimezone });
-  if (startDateTimeUtc.getTime() < new Date().getTime() - 60000) { 
-    errors.schedule.startDate = 'Cannot be in the past.'; 
+  if (!isStarted) {
+    const campaignTimezone = formData.get("timezone");
+    const startDateTimeUtc = toDate(formData.get("startDate"), { timeZone: campaignTimezone });
+    if (startDateTimeUtc.getTime() < new Date().getTime() - 60000) { 
+      errors.schedule.startDate = 'Cannot be in the past.'; 
+    }
+    dataToUpdate.startDateTime = startDateTimeUtc;
+    dataToUpdate.startingParticipants = parseInt(formData.get("startingParticipants"), 10);
   }
-  dataToUpdate.startDateTime = startDateTimeUtc;
-  dataToUpdate.startingParticipants = parseInt(formData.get("startingParticipants"), 10);
-}
 
-// 2. MOVE End Date logic out here so it can always be edited
-const campaignTimezone = formData.get("timezone");
-const endDateTimeUtc = toDate(formData.get("endDate"), { timeZone: campaignTimezone });
-const currentStart = dataToUpdate.startDateTime || campaign.startDateTime;
+  const campaignTimezone = formData.get("timezone");
+  const endDateTimeUtc = toDate(formData.get("endDate"), { timeZone: campaignTimezone });
+  const currentStart = dataToUpdate.startDateTime || campaign.startDateTime;
 
-if (currentStart >= endDateTimeUtc) { 
-  errors.schedule.endDate = 'Must be after start date.'; 
-} else {
-  dataToUpdate.endDateTime = endDateTimeUtc;
-  dataToUpdate.timezone = campaignTimezone; // Update timezone as well
-}
+  if (currentStart >= endDateTimeUtc) { 
+    errors.schedule.endDate = 'Must be after start date.'; 
+  } else {
+    dataToUpdate.endDateTime = endDateTimeUtc;
+    dataToUpdate.timezone = campaignTimezone;
+  }
 
   if (errors.product || errors.leaderDiscount || errors.tiers.some(e => e) || Object.keys(errors.schedule).length > 0) {
     return json({ errors }, { status: 422 });
   }
 
   try {
-    // 🔄 2. IF VARIANTS OR DATES CHANGED, REBUILD THE SELLING PLAN
-    // 🔄 IF VARIANTS OR DATES CHANGED, REBUILD THE SELLING PLAN
     if (dataToUpdate.selectedVariantIdsJson || dataToUpdate.endDateTime) {
-      
-      // ✅ 1. Instantly delete the old group using our saved Group ID!
       if (campaign.sellingPlanGroupId) {
         await admin.graphql(`
           mutation { sellingPlanGroupDelete(id: "${campaign.sellingPlanGroupId}") { deletedSellingPlanGroupId } }
@@ -184,7 +187,6 @@ if (currentStart >= endDateTimeUtc) {
         ? JSON.parse(dataToUpdate.selectedVariantIdsJson) 
         : JSON.parse(campaign.selectedVariantIdsJson);
       const productId = dataToUpdate.productId || campaign.productId;
-      const title = dataToUpdate.productTitle || campaign.productTitle;
 
       const spMutation = `
         mutation sellingPlanGroupCreate($input: SellingPlanGroupInput!, $resources: SellingPlanGroupResourceInput) {
@@ -219,14 +221,12 @@ if (currentStart >= endDateTimeUtc) {
       const spResponse = await admin.graphql(spMutation, { variables: { input: spInput, resources: spResources } });
       const spData = await spResponse.json();
       
-      // ✅ 2. Save BOTH NEW IDs to our database update object
       if (spData.data?.sellingPlanGroupCreate?.sellingPlanGroup) {
         dataToUpdate.sellingPlanGroupId = spData.data.sellingPlanGroupCreate.sellingPlanGroup.id;
         dataToUpdate.sellingPlanId = spData.data.sellingPlanGroupCreate.sellingPlanGroup.sellingPlans.edges[0].node.id;
       }
     }
 
-    // 💾 Finally, update NeonDB with all the new form data AND the new sellingPlanId
     if (Object.keys(dataToUpdate).length > 0) {
       await db.campaign.update({ where: { id: campaignId, shop: session.shop }, data: dataToUpdate });
     }
@@ -240,7 +240,7 @@ if (currentStart >= endDateTimeUtc) {
 };
 
 export default function EditCampaignPage() {
-  const { campaign, participantCount, version } = useLoaderData();
+  const { campaign, participantCount, version, translations } = useLoaderData(); // ✨ Read translations
   const submit = useSubmit();
   const navigation = useNavigation();
   const actionData = useActionData();
@@ -268,7 +268,6 @@ export default function EditCampaignPage() {
   );
 
   const isStarted = new Date(campaign.startDateTime) < new Date();
-// NOTE: This should be updated later to fetch the real participant count
   const hasParticipants = participantCount > 0; 
   const isFinished = campaign.status === 'SUCCESSFUL' || campaign.status === 'FAILED';
   const formKey = version || campaign.id;
@@ -282,8 +281,8 @@ export default function EditCampaignPage() {
   }, []);
   
   const handleSave = () => {
-  campaignFormRef.current?.submit(); // Directly call the .submit() method
-};
+    campaignFormRef.current?.submit(); 
+  };
 
   const handleDiscard = () => { 
     campaignFormRef.current?.discard(); 
@@ -291,12 +290,14 @@ export default function EditCampaignPage() {
   
   useEffect(() => {
     if (navigation.state === 'idle' && actionData?.errors) {
-      app.toast.show('Please review the errors on the form', { isError: true, duration: 3000 });
+      // ✨ Translate toast error
+      app.toast.show(translations.toastError, { isError: true, duration: 3000 });
     } else if (navigation.state === 'idle' && isSuccessRedirect) {
-      app.toast.show('Campaign saved successfully');
+      // ✨ Translate toast success
+      app.toast.show(translations.toastSuccess);
       navigate(location.pathname, { replace: true });
     }
-  }, [actionData, navigation.state, app, isSuccessRedirect, location.pathname, navigate]);
+  }, [actionData, navigation.state, app, isSuccessRedirect, location.pathname, navigate, translations]);
 
   useEffect(() => {
     if (blocker.state === "blocked") {
@@ -311,10 +312,9 @@ export default function EditCampaignPage() {
   
   return (
     <Page
-      title="Edit campaign"
-      backAction={{ content: 'Campaigns', onAction: handleBackAction }}
+      title={translations.title}
+      backAction={{ content: translations.campaignsLabel, onAction: handleBackAction }}
     >
-      {/* ✅ This now uses the correct child-button pattern */}
       <SaveBar id="edit-campaign-save-bar">
         <button 
           variant="primary" 
@@ -322,10 +322,10 @@ export default function EditCampaignPage() {
           loading={isBusy ? "" : undefined}
           disabled={!isFormValid || isBusy}
         >
-          Save
+          {translations.save}
         </button>
         <button onClick={handleDiscard}>
-          Discard
+          {translations.discard}
         </button>
       </SaveBar>
 
@@ -341,6 +341,7 @@ export default function EditCampaignPage() {
             isFinished={isFinished}
             hasParticipants={hasParticipants}
             formErrors={actionData?.errors}
+            translations={translations.form} // ✨ Pass the massive dictionary form!
           />
         </Layout.Section>
       </Layout>

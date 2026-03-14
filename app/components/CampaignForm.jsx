@@ -25,6 +25,7 @@ import {
   Icon,
   ButtonGroup,
   List,
+  Tooltip, // ✨ Import the Tooltip component
 } from '@shopify/polaris';
 import { toDate, formatInTimeZone } from 'date-fns-tz';
 import { addMinutes } from 'date-fns';
@@ -39,7 +40,7 @@ export const CampaignForm = forwardRef(({
   formErrors = {},
   onDirtyChange = () => { },
   onValidityChange = () => { },
-  translations = {} // ✨ Inject translations prop
+  translations = {}
 }, ref) => {
   const formRef = useRef(null);
   const hasUserInteracted = useRef(false);
@@ -325,24 +326,33 @@ export const CampaignForm = forwardRef(({
   const pickerError = formErrors?.product || clientPickerError;
   const isEditing = !!initialData.id;
 
-  // ✨ Helper strings mapping directly to translations
   const tierLabel = countingMethod === 'PARTICIPANT' 
     ? (translations?.sections?.tiers?.countBuyers || 'Min. participants') 
     : (translations?.sections?.tiers?.countItems || 'Min. items sold');
 
-  const cardTitle = isEditing ? "Manage Your Campaign" : (translations?.title || "Set Up Your Campaign");
+  const startingCountLabel = countingMethod === 'PARTICIPANT'
+    ? (translations?.sections?.features?.startingParticipantsLabel || 'Starting participants (fake count)')
+    : (translations?.sections?.features?.startingItemsLabel || 'Starting items sold (fake count)');
+
+  const startingCountDetails = countingMethod === 'PARTICIPANT'
+    ? (translations?.sections?.features?.startingParticipantsDetails || 'Sets a starting number of participants to make the group buy look more popular')
+    : (translations?.sections?.features?.startingItemsDetails || 'Sets a starting number of items sold to make the group buy look more popular');
+
+  const cardTitle = isEditing 
+    ? (translations?.notes?.editTitle || "Manage Your Campaign") 
+    : (translations?.title || "Set Up Your Campaign");
   
   const createListItems = [
     translations?.sections?.product?.description || "Select the product and variants for this campaign.",
     translations?.sections?.tiers?.description || "Define the volume discounts. Tiers must be in ascending order.",
     translations?.sections?.schedule?.description || "Set when your group buy starts and ends.",
-    "Note: The product and campaign type will be locked after creation."
+    translations?.notes?.createLockWarning || "Note: The product and campaign type will be locked after creation."
   ];
 
   const editListItems = [
-    "You can adjust the campaign's end date at any time.",
-    "Tiers and features are locked once the campaign starts or participants join.",
-    "The selected product and campaign type cannot be changed."
+    translations?.notes?.editDate || "You can adjust the campaign's end date at any time.",
+    translations?.notes?.editLockWarning || "Tiers and features are locked once the campaign starts or participants join.",
+    translations?.notes?.editProductWarning || "The selected product and campaign type cannot be changed."
   ];
 
   return (
@@ -411,7 +421,7 @@ export const CampaignForm = forwardRef(({
                 )}
                 {selectedProducts.length > 0 && (
                   <Button variant="plain" tone="critical" onClick={() => onValueChange(setSelectedProducts)([])} disabled={!!initialData.id}>
-                    {translations?.sections?.tiers?.remove || "Remove all"}
+                    {translations?.notes?.removeAll || "Remove all"}
                   </Button>
                 )}
                 {!selectedProducts.length && productFetcher.state !== 'loading' && (
@@ -420,7 +430,7 @@ export const CampaignForm = forwardRef(({
                       {translations?.sections?.product?.selectBtn || "Browse Products"}
                     </Button>
                     <Text as="p" tone="subdued">
-                      You can only select variants from a single product for each campaign.
+                      {translations?.notes?.singleProductWarning || "You can only select variants from a single product for each campaign."}
                     </Text>
                   </BlockStack>
                 )}
@@ -437,14 +447,24 @@ export const CampaignForm = forwardRef(({
                       onClick={() => onValueChange(setScope)('PRODUCT')}
                       disabled={!!initialData.id && scope !== 'PRODUCT'} 
                     >
-                      {translations?.sections?.product?.scopeProduct || "Product-wide"}
+                      {/* ✨ Added Tooltip with dotted underline for Product Scope */}
+                      <Tooltip content={translations?.sections?.product?.scopeProductTooltip || "The discount target applies to total sales across all variants combined."}>
+                        <span style={{ textDecoration: 'underline', textDecorationStyle: 'dotted', textUnderlineOffset: '3px' }}>
+                          {translations?.sections?.product?.scopeProduct || "Product-wide"}
+                        </span>
+                      </Tooltip>
                     </Button>
                     <Button
                       pressed={scope === 'VARIANT'}
                       onClick={() => onValueChange(setScope)('VARIANT')}
                       disabled={!!initialData.id && scope !== 'VARIANT'}
                     >
-                      {translations?.sections?.product?.scopeVariant || "Per-Variant"}
+                      {/* ✨ Added Tooltip with dotted underline for Variant Scope */}
+                      <Tooltip content={translations?.sections?.product?.scopeVariantTooltip || "Each variant must reach the target individually to unlock the discount."}>
+                        <span style={{ textDecoration: 'underline', textDecorationStyle: 'dotted', textUnderlineOffset: '3px' }}>
+                          {translations?.sections?.product?.scopeVariant || "Per-Variant"}
+                        </span>
+                      </Tooltip>
                     </Button>
                   </ButtonGroup>
                 </BlockStack>
@@ -456,14 +476,24 @@ export const CampaignForm = forwardRef(({
                       onClick={() => onValueChange(setCountingMethod)('PARTICIPANT')}
                       disabled={!!initialData.id && countingMethod !== 'PARTICIPANT'}
                     >
-                      {translations?.sections?.tiers?.countBuyers || "By Participants"}
+                      {/* ✨ Added Tooltip with dotted underline for Buyers count */}
+                      <Tooltip content={translations?.sections?.tiers?.countBuyersTooltip || "Progress increases by 1 for each unique order, regardless of how many items they buy."}>
+                        <span style={{ textDecoration: 'underline', textDecorationStyle: 'dotted', textUnderlineOffset: '3px' }}>
+                          {translations?.sections?.tiers?.countBuyers || "By Participants"}
+                        </span>
+                      </Tooltip>
                     </Button>
                     <Button
                       pressed={countingMethod === 'ITEM_QUANTITY'}
                       onClick={() => onValueChange(setCountingMethod)('ITEM_QUANTITY')}
                       disabled={!!initialData.id && countingMethod !== 'ITEM_QUANTITY'}
                     >
-                      {translations?.sections?.tiers?.countItems || "By Item Quantity"}
+                      {/* ✨ Added Tooltip with dotted underline for Items count */}
+                      <Tooltip content={translations?.sections?.tiers?.countItemsTooltip || "Progress increases based on the actual quantity of items purchased."}>
+                        <span style={{ textDecoration: 'underline', textDecorationStyle: 'dotted', textUnderlineOffset: '3px' }}>
+                          {translations?.sections?.tiers?.countItems || "By Item Quantity"}
+                        </span>
+                      </Tooltip>
                     </Button>
                   </ButtonGroup>
                 </BlockStack>
@@ -473,16 +503,37 @@ export const CampaignForm = forwardRef(({
               <BlockStack gap="400">
                 <Text as="h2" variant="headingMd">{translations?.sections?.tiers?.title || "Discount Tiers"}</Text>
                 <FormLayout>
-                  {tiers.map((tier, index) => (
-                    <FormLayout.Group key={index}>
-                      <TextField label={`Tier ${index + 1}: ${tierLabel}`}
-                        value={tier.quantity}
-                        onChange={(v) => handleTierChange(index, 'quantity', v)}
-                        disabled={isStarted || hasParticipants} error={tierErrors[index]?.quantity} autoComplete="off" />
-                      <TextField label={translations?.sections?.tiers?.tierDiscount || "Discount (%)"} value={tier.discount} onChange={(v) => handleTierChange(index, 'discount', v)} disabled={isStarted || hasParticipants} error={tierErrors[index]?.discount} autoComplete="off" />
-                      <div style={{ marginTop: '10px' }}><Button icon={DeleteIcon} onClick={() => handleRemoveTier(index)} disabled={tiers.length === 1 || hasParticipants} accessibilityLabel={`Remove Tier ${index + 1}`} /></div>
-                    </FormLayout.Group>
-                  ))}
+                  {tiers.map((tier, index) => {
+                    const tierPrefix = translations?.sections?.tiers?.tierPrefix || "Tier";
+                    return (
+                      <FormLayout.Group key={index}>
+                        <TextField 
+                          label={`${tierPrefix} ${index + 1}: ${tierLabel}`}
+                          value={tier.quantity}
+                          onChange={(v) => handleTierChange(index, 'quantity', v)}
+                          disabled={isStarted || hasParticipants} 
+                          error={tierErrors[index]?.quantity} 
+                          autoComplete="off" 
+                        />
+                        <TextField 
+                          label={translations?.sections?.tiers?.tierDiscount || "Discount (%)"} 
+                          value={tier.discount} 
+                          onChange={(v) => handleTierChange(index, 'discount', v)} 
+                          disabled={isStarted || hasParticipants} 
+                          error={tierErrors[index]?.discount} 
+                          autoComplete="off" 
+                        />
+                        <div style={{ marginTop: '10px' }}>
+                          <Button 
+                            icon={DeleteIcon} 
+                            onClick={() => handleRemoveTier(index)} 
+                            disabled={tiers.length === 1 || hasParticipants} 
+                            accessibilityLabel={`Remove Tier ${index + 1}`} 
+                          />
+                        </div>
+                      </FormLayout.Group>
+                    );
+                  })}
                 </FormLayout>
                 <Button onClick={handleAddTier} icon={PlusIcon} disabled={isStarted || hasParticipants}>{translations?.sections?.tiers?.addTier || "Add Tier"}</Button>
               </BlockStack>
@@ -497,7 +548,10 @@ export const CampaignForm = forwardRef(({
                 <Autocomplete options={filteredTimezoneOptions} selected={[timezone]} onSelect={handleSelectTimezone} disabled={isStarted}
                   textField={<Autocomplete.TextField onChange={handleTimezoneInputChange} label={translations?.sections?.schedule?.timezone || "Timezone"} value={timezoneInputValue} placeholder="Search for a timezone" autoComplete="off" disabled={isStarted} />}
                 />
-                <Text as="p" tone="subdued" alignment="center">Current time in {timezone.replace(/_/g, ' ')} is{' '}<strong>{formatInTimeZone(liveTime, timezone, 'MMM d, yyyy, HH:mm:ss')}</strong>.</Text>
+                <Text as="p" tone="subdued" alignment="center">
+                  {translations?.notes?.currentTime || "Current time in"} {timezone.replace(/_/g, ' ')} {translations?.notes?.is || "is"}{' '}
+                  <strong>{formatInTimeZone(liveTime, timezone, 'MMM d, yyyy, HH:mm:ss')}</strong>.
+                </Text>
                 <DateTimePicker
                   label={translations?.sections?.schedule?.startDate || "Start Date"}
                   timezone={timezone}
@@ -522,14 +576,14 @@ export const CampaignForm = forwardRef(({
             </Card>
             <Card>
               <BlockStack gap="400">
-                <Text as="h2" variant="headingMd">Features</Text>
+                <Text as="h2" variant="headingMd">{translations?.sections?.features?.title || "Features"}</Text>
                 <Text as="p" tone="subdued">
-                  Note: Leader Discount and Fake Count cannot be used simultaneously. Enabling one will automatically turn off the other.
+                  {translations?.sections?.features?.note || "Note: Leader Discount and Fake Count cannot be used simultaneously. Enabling one will automatically turn off the other."}
                 </Text>
                 <s-switch
                   ref={leaderDiscountSwitchRef}
-                  label="Leader discount (%)"
-                  details="First participants will receive a discount when they join a group buy"
+                  label={translations?.sections?.features?.leaderLabel || "Leader discount (%)"}
+                  details={translations?.sections?.features?.leaderDetails || "First participants will receive a discount when they join a group buy"}
                   onInput={handleLeaderDiscountToggle}
                   disabled={isStarted || hasParticipants}
                 ></s-switch>
@@ -542,8 +596,8 @@ export const CampaignForm = forwardRef(({
                 />
                 <s-switch
                   ref={startingParticipantsSwitchRef}
-                  label="Starting count (fake count)"
-                  details="Sets a starting number to make the group buy look more popular"
+                  label={startingCountLabel}
+                  details={startingCountDetails}
                   onInput={handleStartingParticipantsToggle}
                   disabled={isStarted || hasParticipants}
                 ></s-switch>

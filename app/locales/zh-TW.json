@@ -102,7 +102,9 @@
         "scopeProduct": "整個產品 (所有顏色)",
         "scopeVariant": "僅限特定顏色",
         "selectedVariants": "已選擇 {{count}} 個顏色",
-        "noProduct": "尚未選擇產品"
+        "noProduct": "尚未選擇產品",
+        "scopeProductTooltip": "折扣目標將計算所有規格的總銷售量。",
+        "scopeVariantTooltip": "每個規格必須獨立達到目標才能解鎖折扣。"
       },
       "schedule": {
         "title": "排程與時區",
@@ -120,8 +122,32 @@
         "addTier": "新增級別",
         "tierTarget": "目標 (件數/買家)",
         "tierDiscount": "折扣 (%)",
-        "remove": "移除"
+        "remove": "移除",
+        "tierPrefix": "級別",
+        "countBuyersTooltip": "無論顧客購買多少商品，每位不重複顧客的訂單進度僅增加 1，同一位顧客在同一個活動中的重複購買將不予計算。",
+        "countItemsTooltip": "進度將根據顧客實際購買的商品總數量來計算。"
+      },
+      "features": {
+        "title": "特別功能",
+        "note": "注意：團長折扣與虛擬初始數量無法同時使用。啟用其中一項將自動停用另一項。",
+        "leaderLabel": "團長折扣 (%)",
+        "leaderDetails": "首位參與者加入團購時將獲得額外折扣。",
+        "startingParticipantsLabel": "初始參與者 (虛擬數量)",
+        "startingItemsLabel": "初始售出數量 (虛擬數量)",
+        "startingParticipantsDetails": "設定一個初始參與人數，讓團購看起來更受歡迎。",
+        "startingItemsDetails": "設定一個初始售出數量，讓團購看起來更受歡迎。"
       }
+    },
+    "notes": {
+      "editTitle": "管理您的活動",
+      "createLockWarning": "注意：建立後將無法變更產品與活動類型。",
+      "editDate": "您可以隨時調整活動的結束日期。",
+      "editLockWarning": "一旦活動開始或有買家參與，級別與特別功能將被鎖定。",
+      "editProductWarning": "無法變更已選的產品與活動類型。",
+      "currentTime": "目前",
+      "is": "的時間為",
+      "singleProductWarning": "每個活動只能選擇一款產品或同款產品的不同顏色。",
+      "removeAll": "全部移除"
     },
     "errors": {
       "noProduct": "請選擇一個產品。",
@@ -134,6 +160,111 @@
     },
     "messages": {
       "success": "活動建立成功！"
+    }
+  },
+  "EditCampaign": { 
+    "title": "編輯活動",
+    "errors": {
+      "noProduct": "請選擇一個產品。",
+      "noVariants": "請至少選擇一個顏色。",
+      "invalidDates": "結束日期必須晚於開始日期。",
+      "pastDates": "開始日期不能在過去。",
+      "noTiers": "請至少新增一個折扣級別。",
+      "invalidTiers": "請正確填寫所有級別欄位。",
+      "tierOrder": "級別數量必須遞增排列。"
+    },
+    "messages": {
+      "success": "活動建立成功！",
+      "saved": "活動已成功儲存",
+      "error": "請檢查表單上的錯誤"
+    }
+  },
+  "Orders": {
+    "title": "「{{productTitle}}」的訂單",
+    "back": "活動",
+    "ProductDetails": {
+      "title": "產品詳細資訊",
+      "retailPrice": "零售價：",
+      "filterVariant": "依規格篩選",
+      "standardProduct": "標準產品"
+    },
+    "FulfillmentSummary": {
+      "title": "出貨摘要",
+      "description": "需要出貨的有效訂單商品總數。",
+      "items": "件",
+      "empty": "目前沒有需要出貨的商品。"
+    },
+    "CampaignProgress": {
+      "title": "活動進度",
+      "progressLabels": {
+        "variantItems": "規格售出總數",
+        "totalItems": "售出總數",
+        "variantParticipants": "規格參與人數",
+        "totalParticipants": "參與總數"
+      },
+      "status": {
+        "scheduled": "已排程",
+        "active": "進行中",
+        "processing": "處理中",
+        "successful": "成功",
+        "failed": "失敗",
+        "unknown": "未知"
+      },
+      "off": "折扣",
+      "realOrders": "實際訂單",
+      "fakeCount": "虛擬數量",
+      "terms": {
+        "scope": "活動計算範圍",
+        "countingMethod": "進度計算方式",
+        "leaderDiscount": "團長折扣",
+        "discountAchieved": "達成的折扣"
+      },
+      "values": {
+        "productWide": "整個產品",
+        "perVariant": "僅限特定顏色",
+        "byItem": "依商品數量",
+        "byParticipant": "依參與人數",
+        "disabled": "已停用",
+        "noneMet": "無 (未達目標)"
+      }
+    },
+    "ParticipantOrders": {
+      "title": "參與者訂單",
+      "table": {
+        "order": "訂單",
+        "date": "日期",
+        "customer": "顧客",
+        "variant": "規格",
+        "qty": "數量",
+        "role": "角色",
+        "payment": "付款狀態",
+        "fulfillment": "出貨狀態"
+      },
+      "roles": {
+        "leader": "團長",
+        "member": "團員",
+        "canceled": "已取消"
+      },
+      "badges": {
+        "payment": {
+          "PENDING": "待付款",
+          "AUTHORIZED": "已授權",
+          "PAID": "已付款",
+          "PARTIALLY_REFUNDED": "部分退款",
+          "REFUNDED": "已退款",
+          "VOIDED": "已作廢"
+        },
+        "fulfillment": {
+          "UNFULFILLED": "未出貨",
+          "PARTIALLY_FULFILLED": "部分出貨",
+          "FULFILLED": "已出貨"
+        }
+      },
+      "empty": {
+        "title": "找不到訂單",
+        "descBase": "目前此活動沒有任何訂單",
+        "descVariant": "（針對所選規格）。"
+      }
     }
   }
 }
