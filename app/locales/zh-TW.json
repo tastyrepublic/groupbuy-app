@@ -11,6 +11,14 @@
       "disableLabel": "活動結束或被刪除時停用「缺貨時繼續銷售」",
       "disableHelp": "一旦活動失效，將產品恢復至其原始庫存行為。"
     },
+    "storefront": {
+      "title": "店面顯示設定",
+      "description": "控制團購活動在您商店中的顯示方式。",
+      "badgeLabel": "在產品卡片上顯示「團購」標籤",
+      "badgeHelp": "自動在商品列表頁為有進行中活動的產品加上視覺標籤。",
+      "timerLabel": "在產品標題旁顯示倒數計時器",
+      "timerHelp": "在產品頁面上顯示即時倒數計時器。"
+    },
     "future": {
       "title": "未來升級",
       "description": "管理實驗性功能和未來的應用程式增強功能。",
@@ -266,5 +274,44 @@
         "descVariant": "（針對所選規格）。"
       }
     }
+  },
+  "Pricing": {
+    "title": "訂閱方案",
+    "description": "立即開始您的 30 天免費試用，完整體驗所有強大功能以提升您的銷量。",
+    "plan": {
+      "title": "進階方案",
+      "price": "$27.00 / 月",
+      "trial": "包含 30 天免費試用",
+      "actionStart": "開始免費試用",
+      "actionActive": "目前方案",
+      "features": [
+        "建立無限數量的團購活動",
+        "進階折扣級別與邏輯",
+        "庫存自動化設定",
+        "自訂店面顯示小工具",
+        "優先電子郵件客服"
+      ]
+    }
+  },
+  "Support": {
+    "title": "說明與客服",
+    "faq": {
+      "title": "常見問題 (FAQ)",
+      "description": "了解如何設定活動、調整設定，以及如何充分利用我們的應用程式。",
+      "button": "前往說明中心"
+    },
+    "contact": {
+      "title": "聯絡我們",
+      "description": "找不到您需要的資訊嗎？我們的客服團隊隨時準備為您服務。",
+      "emailLabel": "電子郵件客服：",
+      "responseTime": "我們通常會在 24 小時內回覆。"
+    }
+  },
+  "Navigation": {
+    "home": "首頁",
+    "create": "建立活動",
+    "pricing": "方案與定價",
+    "support": "說明與客服",
+    "settings": "設定"
   }
 }

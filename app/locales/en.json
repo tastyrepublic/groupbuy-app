@@ -11,6 +11,14 @@
       "disableLabel": "Disable 'Continue selling when out of stock' when campaign ends or is deleted",
       "disableHelp": "Reverts the product to its original inventory behavior once the campaign is inactive."
     },
+    "storefront": {
+      "title": "Storefront Display",
+      "description": "Control how group buy campaigns appear to customers on your store.",
+      "badgeLabel": "Show 'Group Buy' badge on product cards",
+      "badgeHelp": "Automatically adds a visual badge to products with active campaigns on collection pages.",
+      "timerLabel": "Show countdown timer below product title",
+      "timerHelp": "Displays a live countdown timer on the product page."
+    },
     "future": {
       "title": "Future Upgrades",
       "description": "Manage experimental features and future app enhancements.",
@@ -266,5 +274,44 @@
         "descVariant": " for the selected variant."
       }
     }
+  },
+  "Pricing": {
+    "title": "Subscription Plan",
+    "description": "Start your 30-day free trial today. Get full access to all features to supercharge your sales.",
+    "plan": {
+      "title": "Premium Plan",
+      "price": "$27.00 / month",
+      "trial": "30-day free trial included",
+      "actionStart": "Start Free Trial",
+      "actionActive": "Current Plan",
+      "features": [
+        "Create unlimited group buy campaigns",
+        "Advanced discount tiers & logic",
+        "Inventory automation settings",
+        "Custom storefront display widgets",
+        "Priority email support"
+      ]
+    }
+  },
+  "Support": {
+    "title": "Help & Support",
+    "faq": {
+      "title": "Frequently Asked Questions",
+      "description": "Learn how to set up campaigns, configure settings, and get the most out of our app.",
+      "button": "Visit Help Center"
+    },
+    "contact": {
+      "title": "Contact Us",
+      "description": "Can't find what you're looking for? Our support team is here to help.",
+      "emailLabel": "Email Support:",
+      "responseTime": "We typically respond within 24 hours."
+    }
+  },
+  "Navigation": {
+    "home": "Home",
+    "create": "Create Campaign",
+    "pricing": "Pricing",
+    "support": "Support",
+    "settings": "Settings"
   }
 }
