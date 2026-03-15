@@ -7,12 +7,13 @@ import {
   BlockStack, 
   Text, 
   Button, 
-  List, 
   Badge, 
   Divider,
   InlineStack,
-  Box
+  Box,
+  Icon
 } from "@shopify/polaris";
+import { CheckIcon } from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server";
 import { getI18n } from "../utils/i18n.server.js";
 
@@ -21,7 +22,6 @@ export const loader = async ({ request }) => {
   const { billing } = await authenticate.admin(request);
   const { t } = await getI18n(request);
 
-  // Safely check active subscriptions without forcing a redirect
   const billingCheck = await billing.check({
     plans: ["Premium Plan"],
     isTest: true, // ⚠️ Change to false before submitting to the App Store
@@ -42,15 +42,14 @@ export const loader = async ({ request }) => {
 export const action = async ({ request }) => {
   const { billing } = await authenticate.admin(request);
 
-  // Force the Shopify billing approval screen to open
   await billing.request({
     plan: "Premium Plan",
     isTest: true, // ⚠️ Change to false before submitting to the App Store
-    // ✨ FIXED: Removed the extra "https://" because process.env.SHOPIFY_APP_URL already has it!
     returnUrl: `${process.env.SHOPIFY_APP_URL}/app/pricing`, 
   });
 
-  return null; 
+  // ✨ FIXED: Return a valid JSON response instead of null just to be completely safe
+  return json({ success: true }); 
 };
 
 export default function PricingPage() {
@@ -67,46 +66,70 @@ export default function PricingPage() {
     <Page title={translations.title} subtitle={translations.description}>
       <Layout>
         <Layout.Section>
-          <Box paddingBlockStart="400">
-            <div style={{ maxWidth: '600px', margin: '0 auto' }}>
-              <Card background="bg-surface-secondary">
-                <BlockStack gap="500">
-                  <InlineStack align="space-between" blockAlign="center">
-                    <Text as="h2" variant="headingLg">{translations.plan.title}</Text>
+          <Box paddingBlockStart="400" paddingBlockEnd="800">
+            <div style={{ maxWidth: '500px', margin: '0 auto' }}>
+              <Card padding="0"> 
+                
+                {/* Colored Hero Header Section */}
+                <Box padding="500" background="bg-surface-magic-subdued">
+                  <BlockStack gap="200" inlineAlign="center">
+                    <Text as="h2" variant="headingXl">{translations.plan.title}</Text>
                     {isPremium ? (
-                      <Badge tone="success">{translations.plan.actionActive}</Badge>
+                      <Badge tone="success" size="large">{translations.plan.actionActive}</Badge>
                     ) : (
-                      <Badge tone="info">{translations.plan.trial}</Badge>
+                      <Badge tone="info" size="large">{translations.plan.trial}</Badge>
                     )}
-                  </InlineStack>
-
-                  <BlockStack gap="100">
-                    <Text as="p" variant="heading3xl">{translations.plan.price}</Text>
-                    <Text as="p" tone="subdued">{translations.plan.trial}</Text>
                   </BlockStack>
+                </Box>
 
-                  <Button 
-                    size="large" 
-                    variant="primary" 
-                    onClick={handleUpgrade}
-                    loading={isUpgrading}
-                    disabled={isPremium}
-                  >
-                    {isPremium ? translations.plan.actionActive : translations.plan.actionStart}
-                  </Button>
+                {/* Main Content Section */}
+                <Box padding="500">
+                  <BlockStack gap="500">
+                    
+                    {/* Price Focus */}
+                    <BlockStack gap="100" inlineAlign="center">
+                      <Text as="p" variant="heading3xl">{translations.plan.price}</Text>
+                    </BlockStack>
 
-                  <Divider />
+                    {/* Massive Call to Action */}
+                    <BlockStack gap="200">
+                      <Button 
+                        size="large" 
+                        variant="primary" 
+                        fullWidth 
+                        onClick={handleUpgrade}
+                        loading={isUpgrading}
+                        disabled={isPremium}
+                      >
+                        {isPremium ? translations.plan.actionActive : translations.plan.actionStart}
+                      </Button>
+                      <Text as="p" variant="bodySm" tone="subdued" alignment="center">
+                        {translations.plan.trust}
+                      </Text>
+                    </BlockStack>
 
-                  <Box paddingBlockStart="200">
-                    <List type="bullet">
-                      {translations.plan.features.map((feature, idx) => (
-                        <List.Item key={idx}>
-                          <Text as="span" variant="bodyMd">{feature}</Text>
-                        </List.Item>
-                      ))}
-                    </List>
-                  </Box>
-                </BlockStack>
+                    <Divider />
+
+                    {/* ✨ PERFECTLY ALIGNED FEATURE LIST - POLARIS NATIVE WAY */}
+                    <InlineStack align="center">
+                      <BlockStack gap="300" inlineAlign="start">
+                        <Text as="h3" variant="headingSm">{translations.plan.includes}</Text>
+                        
+                        {translations.plan.features.map((feature, idx) => (
+                          <InlineStack key={idx} gap="200" wrap={false} blockAlign="start">
+                            {/* Box handles the slight downward nudge to align the icon with text */}
+                            <Box paddingBlockStart="025">
+                              <Icon source={CheckIcon} tone="success" />
+                            </Box>
+                            <Text as="span" variant="bodyMd">{feature}</Text>
+                          </InlineStack>
+                        ))}
+
+                      </BlockStack>
+                    </InlineStack>
+
+                  </BlockStack>
+                </Box>
               </Card>
             </div>
           </Box>

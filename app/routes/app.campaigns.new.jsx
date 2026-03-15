@@ -159,6 +159,7 @@ export const action = async ({ request }) => {
         productId: formData.get("productId"),
         productTitle: formData.get("productTitle"),
         productImage: formData.get("productImage"),
+        productHandle: formData.get("productHandle"),
         selectedVariantIdsJson: selectedVariantIdsJson,
         startDateTime: startDateTimeUtc,
         endDateTime: endDateTimeUtc,

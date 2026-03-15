@@ -37,6 +37,7 @@ model Campaign {
   productId          String // The Shopify Product GID, e.g., "gid://shopify/Product/12345"
   productTitle       String
   productImage       String? // The '?' makes this optional
+  productHandle      String?
   selectedVariantIdsJson String? // Stores a JSON string of variant GIDs
   startDateTime      DateTime
   endDateTime        DateTime
@@ -96,6 +97,11 @@ model Settings {
   shop                        String   @id
   autoContinueSelling         Boolean  @default(true)
   disableContinueSellingOnEnd Boolean  @default(true)
+  
+  // ✨ Added: Storefront display settings
+  enableBadge                 Boolean  @default(false)
+  enableTimer                 Boolean  @default(false)
+  
   createdAt                   DateTime @default(now())
   updatedAt                   DateTime @updatedAt
 }

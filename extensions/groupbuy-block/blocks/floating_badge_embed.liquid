@@ -1,0 +1,155 @@
+{% schema %}
+{
+  "name": "Floating Group Buy Badge",
+  "target": "body",
+  "settings": [
+    {
+      "type": "text",
+      "id": "badge_text",
+      "label": "Badge Text",
+      "default": "🔥 Group Buy"
+    },
+    {
+      "type": "color",
+      "id": "badge_bg",
+      "label": "Background Color",
+      "default": "#7C83FD"
+    },
+    {
+      "type": "color",
+      "id": "badge_text_color",
+      "label": "Text Color",
+      "default": "#FFFFFF"
+    },
+    {
+      "type": "text",
+      "id": "timer_prefix_text",
+      "label": "Timer Prefix Text",
+      "default": "⏳ Ends in:"
+    },
+    {
+      "type": "color",
+      "id": "timer_color",
+      "label": "Timer Text Color",
+      "default": "#D32F2F"
+    }
+  ]
+}
+{% endschema %}
+
+<script>
+  document.addEventListener('DOMContentLoaded', async function() {
+    const productLinks = Array.from(document.querySelectorAll('a[href*="/products/"]'));
+    if (productLinks.length === 0) return;
+
+    const handles = new Set();
+    productLinks.forEach(link => {
+      const match = link.href.match(/\/products\/([^?#]+)/);
+      if (match && match[1]) handles.add(match[1]);
+    });
+
+    if (handles.size === 0) return;
+
+    try {
+      const handlesQuery = Array.from(handles).join(',');
+      const response = await fetch(`/apps/gbs/storefront?handles=${handlesQuery}`);
+      const data = await response.json();
+      const activeHandlesMap = data.activeCampaignsByHandle || {}; 
+
+      productLinks.forEach(link => {
+        const match = link.href.match(/\/products\/([^?#]+)/);
+        const handle = match ? match[1] : null;
+
+        if (handle && activeHandlesMap[handle]) {
+          const campaignDetails = activeHandlesMap[handle];
+          const hasImage = link.querySelector('img');
+
+          // --- 1. THE FLOATING BADGE ---
+          if (hasImage && data.settings.enableBadge && !link.querySelector('.gbs-floating-badge')) {
+            link.style.position = 'relative';
+            link.style.display = link.style.display === 'inline' ? 'inline-block' : link.style.display; 
+
+            const badge = document.createElement('div');
+            badge.className = 'gbs-floating-badge';
+            badge.innerText = "{{ block.settings.badge_text }}";
+            Object.assign(badge.style, {
+              position: 'absolute', top: '8px', left: '8px',
+              backgroundColor: '{{ block.settings.badge_bg }}', color: '{{ block.settings.badge_text_color }}',
+              padding: '4px 8px', borderRadius: '4px', fontWeight: 'bold', fontSize: '12px',
+              zIndex: '10', pointerEvents: 'none', boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+            });
+            link.appendChild(badge);
+          }
+
+          // --- 2. THE COLLECTION TIMER ---
+          if (data.settings.enableTimer) {
+            
+            // ✨ SMART DOM WALKER: Climb up the HTML until we find the price or text block
+            let cardWrapper = link;
+            let priceElement = null;
+            let textInfoElement = null;
+
+            while (cardWrapper && cardWrapper !== document.body) {
+              priceElement = cardWrapper.querySelector('.price, .product-item__price, [id^="price-"]');
+              textInfoElement = cardWrapper.querySelector('.card__information, .card-information, .product-item__info');
+              
+              if (priceElement || textInfoElement) break; // Found the shared product card container!
+              
+              cardWrapper = cardWrapper.parentElement;
+            }
+
+            if (!cardWrapper || cardWrapper === document.body) {
+              cardWrapper = link.parentElement; // Ultimate fallback
+            }
+
+            // ✨ THE BULLETPROOF CHECK: If this entire product card has NO timer yet, add exactly one!
+            if (!cardWrapper.querySelector('.gbs-collection-timer')) {
+              
+              const timerContainer = document.createElement('div');
+              timerContainer.className = 'gbs-collection-timer';
+              Object.assign(timerContainer.style, {
+                marginTop: '6px', marginBottom: '8px', fontSize: '13px', 
+                color: '{{ block.settings.timer_color }}', fontWeight: '600', 
+                textAlign: 'left' 
+              });
+
+              // Inject it in the perfect spot
+              if (priceElement && priceElement.parentNode) {
+                priceElement.parentNode.insertBefore(timerContainer, priceElement.nextSibling);
+              } else if (textInfoElement) {
+                textInfoElement.appendChild(timerContainer);
+              } else {
+                cardWrapper.appendChild(timerContainer);
+              }
+
+              // Start the countdown logic
+              const endTime = new Date(campaignDetails.endDateTime).getTime();
+              const interval = setInterval(() => {
+                const now = new Date().getTime();
+                const distance = endTime - now;
+
+                if (distance < 0) {
+                  clearInterval(interval);
+                  timerContainer.innerText = "Ended";
+                  return;
+                }
+
+                const days = Math.floor(distance / (1000 * 60 * 60 * 24));
+                const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
+                const seconds = Math.floor((distance % (1000 * 60)) / 1000);
+
+                let timeStr = "{{ block.settings.timer_prefix_text }} ";
+                if (days > 0) timeStr += `${days}d `;
+                timeStr += `${hours}h ${minutes}m ${seconds}s`;
+                timerContainer.innerText = timeStr;
+              }, 1000);
+            }
+          }
+        }
+      });
+    } catch (error) {
+      console.error("Group Buy Widget Error:", error);
+    }
+  });
+</script>

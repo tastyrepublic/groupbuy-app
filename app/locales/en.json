@@ -284,6 +284,8 @@
       "trial": "30-day free trial included",
       "actionStart": "Start Free Trial",
       "actionActive": "Current Plan",
+      "trust": "Cancel anytime. No hidden fees.",
+      "includes": "What's included:",
       "features": [
         "Create unlimited group buy campaigns",
         "Advanced discount tiers & logic",

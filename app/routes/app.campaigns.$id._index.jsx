@@ -50,6 +50,7 @@ export const loader = async ({ request, params }) => {
                 product {
                   id
                   title
+                  handle
                   media(first: 1) {
                     edges {
                       node {
@@ -80,6 +81,7 @@ export const loader = async ({ request, params }) => {
           title: variant.product.title,
           variantTitle: variant.title,
           image: variantImageUrl || productImageUrl || '',
+          handle: variant.product.handle,
         };
       });
     }
@@ -131,6 +133,7 @@ export const action = async ({ request, params }) => {
       dataToUpdate.productId = formData.get("productId");
       dataToUpdate.productTitle = formData.get("productTitle");
       dataToUpdate.productImage = formData.get("productImage");
+      dataToUpdate.productHandle = formData.get("productHandle");
     } else {
       errors.product = "You must select at least one product variant.";
     }

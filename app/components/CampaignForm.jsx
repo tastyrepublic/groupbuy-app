@@ -244,6 +244,7 @@ export const CampaignForm = forwardRef(({
             title: product.title,
             variantTitle: variant.title,
             image: variant.image?.originalSrc || product.images[0]?.originalSrc || '',
+            handle: product.handle
           }))
         );
 
@@ -618,6 +619,7 @@ export const CampaignForm = forwardRef(({
           <input type="hidden" name="productId" value={selectedProducts[0].id} />
           <input type="hidden" name="productTitle" value={selectedProducts[0].title} />
           <input type="hidden" name="productImage" value={selectedProducts[0].image} />
+          <input type="hidden" name="productHandle" value={selectedProducts[0].handle || ""} />
           <input
             type="hidden"
             name="selectedVariantIdsJson"

@@ -14,6 +14,8 @@ import { useState, useEffect } from "react";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { useAppBridge } from "@shopify/app-bridge-react";
+
+// ✨ 1. Import your new i18n utility
 import { getI18n } from "../utils/i18n.server.js";
 
 export const loader = async ({ request }) => {
@@ -27,11 +29,15 @@ export const loader = async ({ request }) => {
     settings = {
       autoContinueSelling: true,
       disableContinueSellingOnEnd: true,
+      enableBadge: false, // ✨ Added default
+      enableTimer: false, // ✨ Added default
     };
   }
 
+  // ✨ 2. Fetch translations on the server
   const { t } = await getI18n(request);
 
+  // ✨ 3. Package the translated strings into the loader data using returnObjects for cleaner code
   const translations = {
     title: t("Settings.title", "Settings"),
     saveButton: t("Settings.save", "Save"),
@@ -50,15 +56,26 @@ export const action = async ({ request }) => {
   
   const autoContinueSelling = formData.get("autoContinueSelling") === "true";
   const disableContinueSellingOnEnd = formData.get("disableContinueSellingOnEnd") === "true";
+  
+  // ✨ Parse the new storefront toggles
+  const enableBadge = formData.get("enableBadge") === "true";
+  const enableTimer = formData.get("enableTimer") === "true";
 
-  // Note: Only the inventory features are saved. The storefront features are UI dummies for now!
+  // ✨ Save everything to the database
   await db.settings.upsert({
     where: { shop: session.shop },
-    update: { autoContinueSelling, disableContinueSellingOnEnd },
+    update: { 
+      autoContinueSelling, 
+      disableContinueSellingOnEnd,
+      enableBadge,
+      enableTimer
+    },
     create: { 
       shop: session.shop, 
       autoContinueSelling, 
-      disableContinueSellingOnEnd 
+      disableContinueSellingOnEnd,
+      enableBadge,
+      enableTimer 
     },
   });
 
@@ -73,42 +90,40 @@ export default function SettingsPage() {
   const [autoContinueSelling, setAutoContinueSelling] = useState(settings.autoContinueSelling);
   const [disableContinueSellingOnEnd, setDisableContinueSellingOnEnd] = useState(settings.disableContinueSellingOnEnd);
 
-  // ✨ NEW: Dummy state for storefront features
-  const [enableBadge, setEnableBadge] = useState(false);
-  const [enableTimer, setEnableTimer] = useState(false);
+  // ✨ Initialize state directly from the database load
+  const [enableBadge, setEnableBadge] = useState(settings.enableBadge || false);
+  const [enableTimer, setEnableTimer] = useState(settings.enableTimer || false);
 
   const isDirty = 
     autoContinueSelling !== settings.autoContinueSelling || 
     disableContinueSellingOnEnd !== settings.disableContinueSellingOnEnd ||
-    enableBadge !== false || 
-    enableTimer !== false;
+    enableBadge !== settings.enableBadge || 
+    enableTimer !== settings.enableTimer;
 
   const handleSave = () => {
     fetcher.submit(
       { 
         autoContinueSelling: String(autoContinueSelling), 
-        disableContinueSellingOnEnd: String(disableContinueSellingOnEnd) 
-        // Dummy values intentionally left out of submission so Prisma doesn't crash
+        disableContinueSellingOnEnd: String(disableContinueSellingOnEnd),
+        enableBadge: String(enableBadge),
+        enableTimer: String(enableTimer)
       }, 
       { method: "post" }
     );
-    // Reset dummies to "saved" visually
-    setEnableBadge(false);
-    setEnableTimer(false);
   };
 
   useEffect(() => {
     if (fetcher.state === "idle" && fetcher.data?.success) {
-      app.toast.show(translations.toastSaved);
+      app.toast.show(translations.toastSaved); 
     }
   }, [fetcher.state, fetcher.data, app, translations]);
 
   return (
     <Page
-      title={translations.title}
+      title={translations.title} 
       backAction={{ url: "/app" }}
       primaryAction={{
-        content: translations.saveButton,
+        content: translations.saveButton, 
         onAction: handleSave,
         loading: fetcher.state !== "idle",
         disabled: !isDirty,
@@ -117,9 +132,8 @@ export default function SettingsPage() {
       <Box paddingInline={{ xs: '400', sm: '0' }} paddingBlockEnd="800">
         <BlockStack gap="500">
           <Layout>
-            {/* INVENTORY SETTINGS */}
             <Layout.AnnotatedSection
-              title={translations.inventory.title}
+              title={translations.inventory.title} 
               description={translations.inventory.description}
             >
               <Card>
@@ -140,7 +154,7 @@ export default function SettingsPage() {
               </Card>
             </Layout.AnnotatedSection>
 
-            {/* ✨ NEW: STOREFRONT DISPLAY SETTINGS DUMMY */}
+            {/* ✨ NEW: Storefront Display Settings Section */}
             <Layout.AnnotatedSection
               title={translations.storefront.title}
               description={translations.storefront.description}
@@ -152,20 +166,17 @@ export default function SettingsPage() {
                     helpText={translations.storefront.badgeHelp}
                     checked={enableBadge}
                     onChange={(val) => setEnableBadge(val)}
-                    disabled // ✨ ADD THIS LINE to gray it out!
                   />
                   <Checkbox
                     label={translations.storefront.timerLabel}
                     helpText={translations.storefront.timerHelp}
                     checked={enableTimer}
                     onChange={(val) => setEnableTimer(val)}
-                    disabled // ✨ ADD THIS LINE to gray it out!
                   />
                 </FormLayout>
               </Card>
             </Layout.AnnotatedSection>
 
-            {/* FUTURE UPGRADES */}
             <Layout.AnnotatedSection
               title={translations.future.title}
               description={translations.future.description}
