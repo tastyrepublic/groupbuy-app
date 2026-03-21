@@ -37,6 +37,10 @@
     "msg_already_joined": "You've already joined this group buy! Your new purchase will get the discount, but won't count as a new participant.",
     "msg_welcome_back": "Welcome back! Every item you buy helps reach the goal.",
     "msg_sync_note": "*Note: The progress bar may take a minute to fully sync with our servers.",
-    "error_no_plan": "Error: No Selling Plan Found"
+    "error_no_plan": "Error: No Selling Plan Found",
+    "floating_badge_text": "Group Buy",
+    "floating_starts_in": "Starts in:",
+    "floating_ends_in": "Ends in:",
+    "loading_campaign": "Loading Campaign..."
   }
 }

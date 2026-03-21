@@ -1,3 +1,5 @@
+console.log("🟢 progress-bar.js script loaded into browser.");
+
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
 import { getFirestore, doc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 
@@ -30,7 +32,76 @@ function storeUnsubscribe(container, unsubscribe) {
   activeConnections[timerIdKey].unsubscribe = unsubscribe;
 }
 
+// ✨ UPDATED: Hyper-Aggressive Element Hider (Nothing else removed)
+function toggleNativeElements(container, hide) {
+  try {
+    const shouldHide = container.dataset.hideNative === 'true';
+    console.log(`🎨 Toggling native elements. Request Hide: ${hide} | Merchant Setting: ${shouldHide}`);
+    
+    // 1. Broadest possible list of Shopify Theme selectors
+    const selectors = [
+      '.product-form__buttons', 
+      '.shopify-payment-button', 
+      'button[name="add"]', 
+      '.shopify-buy-it-now-button',
+      '.product-form__quantity', 
+      '.product-form__input--quantity',
+      'quantity-input', 
+      '.quantity-wrapper',
+      '.quantity',
+      '.product-quantity',
+      'label[for^="Quantity-"]' // Catches Dawn theme labels
+    ].join(', ');
+    
+    const elements = document.querySelectorAll(selectors);
+    
+    elements.forEach(el => {
+      // Safety check: NEVER hide our own widget elements!
+      if (el.closest('.gb-widget')) return;
+
+      if (hide && shouldHide) {
+        if (!el.dataset.gbOriginalDisplay) {
+          el.dataset.gbOriginalDisplay = window.getComputedStyle(el).display;
+        }
+        el.style.setProperty('display', 'none', 'important');
+      } else {
+        if (el.dataset.gbOriginalDisplay) {
+          el.style.display = el.dataset.gbOriginalDisplay;
+        } else {
+          el.style.display = ''; 
+        }
+      }
+    });
+
+    // 2. The "Aggressive Hunt": Find the actual quantity input and hide its container
+    const qtyInputs = document.querySelectorAll('input[name="quantity"]');
+    qtyInputs.forEach(input => {
+      if (input.closest('.gb-widget')) return; // Ignore our own!
+      
+      // Find the immediate wrapper div (usually contains the + / - buttons)
+      const wrapper = input.closest('div, fieldset, quantity-input');
+      if (wrapper && wrapper !== document.body) {
+        if (hide && shouldHide) {
+          if (!wrapper.dataset.gbOriginalDisplay) {
+            wrapper.dataset.gbOriginalDisplay = window.getComputedStyle(wrapper).display;
+          }
+          wrapper.style.setProperty('display', 'none', 'important');
+        } else {
+          if (wrapper.dataset.gbOriginalDisplay) {
+            wrapper.style.display = wrapper.dataset.gbOriginalDisplay;
+          } else {
+            wrapper.style.display = ''; 
+          }
+        }
+      }
+    });
+  } catch (e) {
+    console.error("🔴 Error toggling native elements:", e);
+  }
+}
+
 function connectToFirebase(container, campaignData) {
+  console.log("🔥 Connecting to Firebase...");
   const campaignId = container.dataset.campaignId;
   const productVariantId = container.dataset.variantId;
   const projectId = container.dataset.fbProjectid; 
@@ -53,6 +124,7 @@ function connectToFirebase(container, campaignData) {
   const unsubscribe = onSnapshot(docRef, (docSnap) => {
     if (docSnap.exists()) {
       const data = docSnap.data();
+      console.log("🔥 Firebase update received:", data);
       const rawFirestoreProgress = data.progress || 0;
       const startingParticipants = Number(campaignData.startingParticipants) || 0;
       
@@ -193,27 +265,17 @@ const handleNativeSellingPlanUI = () => {
     style.id = 'gb-hide-selling-plans-css';
     style.innerHTML = `
       .shopify-selling-plan-group, shopify-payment-terms, .product-form__input--selling-plan, product-subscriptions { display: none !important; }
-      fieldset:has(input[name="selling_plan"]), div:has(> input[name="selling_plan"]) { display: none !important; }
     `;
     document.head.appendChild(style);
   }
 
-  const disableInputs = () => {
-    const inputs = document.querySelectorAll('input[name="selling_plan"], select[name="selling_plan"], input[name="purchase_option"]');
-    inputs.forEach(input => input.disabled = true);
-  };
+  const forms = document.querySelectorAll('form[action*="/cart/add"]');
+  forms.forEach(form => {
+    if (form.dataset.gbListenerAttached) return;
+    form.dataset.gbListenerAttached = 'true';
 
-  disableInputs();
-  const observer = new MutationObserver(() => disableInputs());
-  observer.observe(document.body, { childList: true, subtree: true });
-
-  const productForms = document.querySelectorAll('form[action*="/cart/add"]');
-  productForms.forEach(form => {
-    form.addEventListener('submit', () => {
-      const hiddenSpInput = form.querySelector('input[name="selling_plan"]');
-      if (hiddenSpInput && !hiddenSpInput.value) {
-        hiddenSpInput.disabled = true; 
-      }
+    form.addEventListener('formdata', (event) => {
+      event.formData.delete('selling_plan');
     });
   });
 };
@@ -265,6 +327,9 @@ function performAnimatedSwap(container, renderCallback) {
 }
 
 function collapseContainer(container) {
+  console.log("⏬ Collapsing Widget (No active campaign)");
+  toggleNativeElements(container, false); // ✨ RESTORE NATIVE BUTTONS
+  
   const currentWrapper = container.querySelector('.gb-wrapper');
   if (currentWrapper) {
       currentWrapper.style.height = currentWrapper.offsetHeight + 'px';
@@ -312,6 +377,8 @@ function setupShareButton(container) {
 }
 
 function renderNotIncludedCampaign(container) {
+  console.log("✏️ Rendering Not Included view.");
+  toggleNativeElements(container, false); // ✨ RESTORE NATIVE BUTTONS
   const notIncludedText = container.dataset.notIncludedText || 'This variant is not included in the current group buy.';
   
   container.innerHTML = `
@@ -327,14 +394,27 @@ function renderNotIncludedCampaign(container) {
 }
 
 function fetchAndRenderCampaign(container, variantId) {
+  console.log(`🔍 Fetching campaign API for variant: ${variantId}`);
   const productId = container.dataset.productId;
   const shop = container.dataset.shop;
+  const simpleVariantId = variantId.toString().split('/').pop();
+  
+  if (!productId || !simpleVariantId || !shop) { 
+    console.warn("⚠️ Missing data for API call (productId, simpleVariantId, or shop)");
+    container.innerHTML = ''; 
+    return; 
+  }
+  
+  if (container.dataset.renderedVariant === simpleVariantId) {
+    console.log("ℹ️ Variant already rendered, skipping.");
+    return; 
+  }
+  container.dataset.renderedVariant = simpleVariantId;
+
   clearConnections(container); 
   
-  const simpleVariantId = variantId.toString().split('/').pop();
-  if (!productId || !simpleVariantId || !shop) { container.innerHTML = ''; return; }
-  
   if (window.Shopify && window.Shopify.designMode) {
+    console.log("🎨 Theme Editor detected. Loading Dummy Data.");
     const previewState = container.dataset.editorPreview || 'ACTIVE';
     const dummyCampaign = {
       startDateTime: new Date(Date.now() + 86400000).toISOString(),
@@ -369,20 +449,32 @@ function fetchAndRenderCampaign(container, variantId) {
       if (!currentWrapper.querySelector('.gb-loading-overlay')) {
           const overlay = document.createElement('div');
           overlay.className = 'gb-loading-overlay';
-          overlay.innerHTML = '<div class="gb-spinner"></div>';
+          
+          // ✨ Fetch the translated text from the Liquid dataset!
+          const loadingText = container.dataset.tLoading || 'Loading Campaign...';
+          
+          // ✨ Inject the spinner AND the translated text
+          overlay.innerHTML = `
+            <div class="gb-spinner" style="margin-bottom: 12px; width: 32px; height: 32px; border-width: 3px;"></div>
+            <div style="font-size: 13px; font-weight: 400; color: var(--gb-desc-color, #5c5f62); letter-spacing: 0.3px;">${loadingText}</div>
+          `;
+          
           currentWrapper.appendChild(overlay);
       }
   }
   
   const apiUrl = `/apps/gbs/campaign?productId=${productId}&variantId=${simpleVariantId}&shop=${shop}`;
+  console.log(`🌐 Calling App Proxy: ${apiUrl}`);
 
   fetch(apiUrl)
     .then(response => {
+      console.log(`📡 Response Status: ${response.status}`);
       if (response.status === 404) return null;
-      if (!response.ok) throw new Error('API request failed.');
+      if (!response.ok) throw new Error(`API request failed with status: ${response.status}`);
       return response.json();
     })
     .then(data => {
+      console.log("✅ API Data Received:", data);
       if (data && data.campaign) {
         container.dataset.hasAnyCampaign = 'true';
         container.dataset.campaignId = data.campaign.id;
@@ -394,11 +486,14 @@ function fetchAndRenderCampaign(container, variantId) {
 
         performAnimatedSwap(container, () => {
           if (data.campaign.status === 'ACTIVE') {
+            console.log("➡️ Rendering ACTIVE Campaign");
             renderActiveCampaign(container, data);
             connectToFirebase(container, data.campaign); 
           } else if (data.campaign.status === 'SCHEDULED') {
+            console.log("➡️ Rendering SCHEDULED Campaign");
             renderScheduledCampaign(container, data.campaign);
           } else if (data.campaign.status === 'ENDED') {
+            console.log("➡️ Rendering ENDED Campaign");
             renderEndedCampaign(container, data.campaign);
           }
         });
@@ -414,12 +509,15 @@ function fetchAndRenderCampaign(container, variantId) {
       }
     })
     .catch(error => {
-      console.log(`Group Buy App: ${error.message}`);
+      console.error(`🔴 Group Buy App Error: ${error.message}`);
       collapseContainer(container);
     });
 }
 
 function renderActiveCampaign(container, data) {
+  console.log("✏️ Drawing Active Campaign UI");
+  toggleNativeElements(container, true); // ✨ HIDE NATIVE BUTTONS
+
   const { campaign, currentProgress } = data;
   const tiers = campaign.tiers.sort((a, b) => a.quantity - b.quantity);
 
@@ -532,7 +630,7 @@ function renderActiveCampaign(container, data) {
       </div>
       
       <div class="gb-info-message" style="font-size: 13px; color: #5c5f62; margin-bottom: 15px; line-height: 1.4;"></div> 
-      
+
       <button class="gb-join-button" style="width: 100%; background: var(--gb-btn-bg, #000); color: var(--gb-btn-text-color, #fff); border: none; padding: var(--gb-btn-padding, 14px); font-size: calc(var(--gb-btn-padding, 14px) + 2px); font-weight: bold; border-radius: var(--gb-btn-radius, 4px); cursor: pointer; transition: opacity 0.2s;">
         ${container.dataset.tJoining || 'Loading...'}
       </button>
@@ -611,6 +709,9 @@ function renderActiveCampaign(container, data) {
 }
 
 function renderScheduledCampaign(container, campaign) {
+  console.log("✏️ Drawing Scheduled Campaign UI");
+  toggleNativeElements(container, true); // ✨ HIDE NATIVE BUTTONS
+
   const tiers = campaign.tiers ? campaign.tiers.sort((a, b) => a.quantity - b.quantity) : [];
   const maxTier = tiers.length > 0 ? tiers[tiers.length - 1] : null;
   const customTitleText = container.dataset.tTitleScheduled || '🔥 A Group Buy is starting soon!';
@@ -752,6 +853,8 @@ function renderScheduledCampaign(container, campaign) {
 }
 
 function renderEndedCampaign(container, campaign) {
+  console.log("✏️ Drawing Ended Campaign UI");
+  toggleNativeElements(container, false); // ✨ RESTORE NATIVE BUTTONS
   const customTitleText = container.dataset.tTitleEnded || 'Group Buy Ended';
   const descText = container.dataset.tDescEnded || 'This group buy has officially ended. Stay tuned for the next one!';
   
@@ -777,8 +880,10 @@ function renderEndedCampaign(container, campaign) {
 }
 
 function initializeJoinButton(container, campaign) { 
+  console.log("🔘 Initializing Join Button");
   const joinButton = container.querySelector('.gb-join-button');
   const infoMessageEl = container.querySelector('.gb-info-message'); 
+  
   if (!joinButton) return;
 
   if (window.Shopify && window.Shopify.designMode) {
@@ -817,17 +922,18 @@ function initializeJoinButton(container, campaign) {
     joinButton.parentNode.replaceChild(newJoinButton, joinButton);
 
     newJoinButton.addEventListener('click', async () => {
-      const originalText = newJoinButton.textContent;
-      
-      newJoinButton.textContent = container.dataset.tJoining || 'Joining...';
-      newJoinButton.disabled = true;
+        console.log("🖱️ User clicked Join Button");
+        const originalText = newJoinButton.textContent;
+        
+        newJoinButton.textContent = container.dataset.tJoining || 'Joining...';
+        newJoinButton.disabled = true;
 
-      const quantityInput = container.querySelector('#gb-quantity');
-      const quantity = quantityInput ? parseInt(quantityInput.value, 10) : 1;
-      const currentVariantId = container.dataset.variantId.split('/').pop(); 
-      const sellingPlanId = container.dataset.sellingPlanId; 
+        const quantityInput = container.querySelector('#gb-quantity');
+        const quantity = quantityInput ? parseInt(quantityInput.value, 10) : 1;
+        const currentVariantId = container.dataset.variantId.split('/').pop(); 
+        const sellingPlanId = container.dataset.sellingPlanId; 
 
-      if (!sellingPlanId) {
+        if (!sellingPlanId) {
         newJoinButton.textContent = container.dataset.tErrPlan || 'Error: No Selling Plan Found';
         setTimeout(() => {
           newJoinButton.textContent = originalText;
@@ -836,19 +942,20 @@ function initializeJoinButton(container, campaign) {
         return;
       }
 
-      let formData = {
-        'items': [{
-          'id': currentVariantId,
-          'quantity': quantity,
-          'selling_plan': sellingPlanId.split('/').pop(),
-          'properties': {
-            '_groupbuy_campaign_id': container.dataset.campaignId
-          }
-        }]
-      };
+      // ✨ Clean, direct checkout payload
+        let formData = {
+          'items': [{
+            'id': currentVariantId,
+            'quantity': quantity,
+            'selling_plan': sellingPlanId.split('/').pop(),
+            'properties': {
+              '_groupbuy_campaign_id': container.dataset.campaignId
+            }
+          }]
+        };
 
-      try {
-        const response = await fetch(window.Shopify.routes.root + 'cart/add.js', {
+        try {
+          const response = await fetch(window.Shopify.routes.root + 'cart/add.js', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(formData)
@@ -882,6 +989,7 @@ function initializeJoinButton(container, campaign) {
     fetch(`/apps/gbs/check-status?productId=${productId}&customerId=${customerId}`)
       .then(res => res.json())
       .then(statusData => {
+        console.log("👤 Customer Status Fetched:", statusData);
         
         if (statusData.pendingContribution > 0) {
           container.dataset.pendingContribution = statusData.pendingContribution;
@@ -920,7 +1028,10 @@ function initializeJoinButton(container, campaign) {
           setupButton(container.dataset.tJoin || 'Join Group Buy');
         }
       })
-      .catch(() => setupButton(container.dataset.tJoin || 'Join Group Buy'));
+      .catch((err) => {
+        console.error("👤 Failed to check customer status:", err);
+        setupButton(container.dataset.tJoin || 'Join Group Buy')
+      });
   } else {
     const newJoinButton = joinButton.cloneNode(true);
     newJoinButton.textContent = container.dataset.tLogin || 'Login or Create Account to Join';
@@ -934,6 +1045,7 @@ function initializeJoinButton(container, campaign) {
 class GroupBuyWidget extends HTMLElement {
   connectedCallback() {
     const initialVariantId = this.dataset.variantId;
+    console.log("🚀 <group-buy-widget> Element Attached. Initial Variant:", initialVariantId);
     if (initialVariantId) {
       const simpleVariantId = initialVariantId.split('/').pop();
       this.dataset.variantId = simpleVariantId;
@@ -965,8 +1077,9 @@ function attachGlobalListeners() {
         return;
       }
       
-      const simpleVariantId = variant.id.toString().split('/').pop();
-      fetchAndRenderCampaign(container, simpleVariantId);
+      const variantIdString = variant.id.toString().split('/').pop();
+      console.log("🔄 Variant changed via 'variant:change' event to:", variantIdString);
+      fetchAndRenderCampaign(container, variantIdString);
     } catch (e) {}
   });
 
@@ -984,8 +1097,10 @@ function attachGlobalListeners() {
       lastEventTime = now;
 
       clearConnections(container);
-      const simpleVariantId = newVariantId.toString().split('/').pop();
-      fetchAndRenderCampaign(container, simpleVariantId);
+      
+      const changedVariantIdString = newVariantId.toString().split('/').pop();
+      console.log("🔄 Variant changed via 'change' event to:", changedVariantIdString);
+      fetchAndRenderCampaign(container, changedVariantIdString);
     } catch (e) {}
   });
 }

@@ -1,0 +1,4 @@
+{
+  "name": "Group Buy Exclusive Cart Enforcer",
+  "description": "Strictly prevents mixing Group Buy items with normal products. This ensures campaign orders are processed separately for clean fulfillment and accurate shipping."
+}

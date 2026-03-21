@@ -11,6 +11,28 @@
       "disableLabel": "Disable 'Continue selling when out of stock' when campaign ends or is deleted",
       "disableHelp": "Reverts the product to its original inventory behavior once the campaign is inactive."
     },
+    "checkout": {
+      "title": "Checkout Protection",
+      "description": "Prevent customers from mixing Group Buy items with standard products in a single order to ensure clean fulfillment.",
+      "boxTitle": "Exclusive Cart Enforcer",
+      "activeTitle": "Enforcer is Active",
+      "inactiveTitle": "Enforcer is Inactive",
+      "activeDesc": "Mixed carts are strictly prohibited.",
+      "inactiveDesc": "Customers can currently mix Group Buy and normal items.",
+      "manageBtn": "Manage Checkout Rule",
+      "configureBtn": "Configure Checkout Rule"
+    },
+    "shipping": {
+      "title": "Shipping Strategy",
+      "description": "Exclude Group Buy items from free shipping thresholds to protect your profit margins.",
+      "boxTitle": "Shipping Guardian Status",
+      "activeTitle": "Guardian is Active",
+      "inactiveTitle": "Guardian is Inactive",
+      "activeDesc": "Group Buy items are excluded from free shipping.",
+      "inactiveDesc": "Standard shipping rules apply to Group Buy items.",
+      "manageBtn": "Manage Shipping Rule",
+      "configureBtn": "Configure Shipping Rule"
+    },
     "storefront": {
       "title": "Storefront Display",
       "description": "Control how group buy campaigns appear to customers on your store.",
@@ -24,6 +46,24 @@
       "description": "Manage experimental features and future app enhancements.",
       "text": "New beta features and automation settings will appear here in future updates."
     }
+  },
+  "ShippingGuardian": {
+    "pageTitle": "Group Buy Checkout Guardian",
+    "backAction": "Shipping",
+    "activateBtn": "Activate Guardian",
+    "toastActivated": "Guardian Activated!",
+    "errorRejected": "Shopify rejected the update:",
+    "errorNotFoundTitle": "Function Not Found",
+    "errorNotFoundDesc": "Could not detect the \"Group Buy Shipping Guardian\" on this store. Try running `npm run deploy` to push it to Shopify.",
+    "activeTitle": "Guardian is Active",
+    "activeDesc1": "The Shipping Guardian is actively securing your checkouts.",
+    "activeDesc2": "To pause this rule, use the native <strong>\"Turn off\"</strong> button at the top of this Shopify page.",
+    "inactiveTitle": "Guardian is Inactive",
+    "inactiveDesc1": "The Shipping Guardian is currently paused.",
+    "inactiveDesc2": "To resume protection, use the native <strong>\"Turn on\"</strong> button at the top of this Shopify page.",
+    "cardTitle": "Exclusive Cart Enforcement",
+    "cardSubtitle": "Live Function ID:",
+    "cardDesc": "When an Exclusive Group Buy Cart reaches the checkout, this function automatically strips away any Free Shipping thresholds to guarantee you collect standard shipping fees on the campaign."
   },
   "Dashboard": {
     "title": "Group Buy Campaigns",

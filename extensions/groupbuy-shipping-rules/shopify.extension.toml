@@ -1,0 +1,22 @@
+api_version = "2026-01"
+
+[[extensions]]
+name = "t:name"
+handle = "groupbuy-shipping-rules"
+uid = "21da82dd-b5e6-62e0-5703-a279ee8115ecdfe5477e"
+type = "function"
+description = "t:description"
+
+  [[extensions.targeting]]
+  target = "cart.delivery-options.transform.run"
+  input_query = "src/cart_delivery_options_transform_run.graphql"
+  export = "cart-delivery-options-transform-run"
+
+  [extensions.build]
+  command = ""
+  path = "dist/function.wasm"
+
+  # ✨ THE FIX: Re-link your custom Remix UI page so Shopify knows where to send you
+  [extensions.ui.paths]
+  create = "/app/delivery-customization/${functionId}/new"
+  details = "/app/delivery-customization/${functionId}/${id}"

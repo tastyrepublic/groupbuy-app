@@ -11,6 +11,28 @@
       "disableLabel": "活動結束或被刪除時停用「缺貨時繼續銷售」",
       "disableHelp": "一旦活動失效，將產品恢復至其原始庫存行為。"
     },
+    "checkout": {
+      "title": "結帳保護",
+      "description": "防止顧客在單筆訂單中混合購買團購商品與一般商品，確保出貨流程順暢。",
+      "boxTitle": "專屬購物車限制器 (Cart Enforcer)",
+      "activeTitle": "限制器已啟用",
+      "inactiveTitle": "限制器未啟用",
+      "activeDesc": "嚴格禁止混合購物車結帳。",
+      "inactiveDesc": "顧客目前可以將團購商品與一般商品一起結帳。",
+      "manageBtn": "管理結帳規則",
+      "configureBtn": "設定結帳規則"
+    },
+    "shipping": {
+      "title": "運費策略",
+      "description": "將團購商品排除在免運門檻之外，以保護您的利潤。",
+      "boxTitle": "運費守護者狀態 (Shipping Guardian)",
+      "activeTitle": "守護者已啟用",
+      "inactiveTitle": "守護者未啟用",
+      "activeDesc": "團購商品已排除在免運優惠之外。",
+      "inactiveDesc": "團購商品目前適用標準運費規則。",
+      "manageBtn": "管理運費規則",
+      "configureBtn": "設定運費規則"
+    },
     "storefront": {
       "title": "店面顯示設定",
       "description": "控制團購活動在您商店中的顯示方式。",
@@ -24,6 +46,24 @@
       "description": "管理實驗性功能和未來的應用程式增強功能。",
       "text": "新的測試功能和自動化設定將在未來的更新中顯示於此。"
     }
+  },
+  "ShippingGuardian": {
+    "pageTitle": "團購結帳守護者",
+    "backAction": "運費",
+    "activateBtn": "啟用守護者",
+    "toastActivated": "守護者已啟用！",
+    "errorRejected": "Shopify 拒絕了此更新：",
+    "errorNotFoundTitle": "找不到功能",
+    "errorNotFoundDesc": "在此商店中偵測不到「團購運費守護者 (Group Buy Shipping Guardian)」。請嘗試執行 `npm run deploy` 將其推送至 Shopify。",
+    "activeTitle": "守護者已啟用",
+    "activeDesc1": "運費守護者正在積極保護您的結帳流程。",
+    "activeDesc2": "如要暫停此規則，請使用此 Shopify 頁面上方的原生 <strong>「停用」</strong> 按鈕。",
+    "inactiveTitle": "守護者未啟用",
+    "inactiveDesc1": "運費守護者目前已暫停。",
+    "inactiveDesc2": "如要恢復保護，請使用此 Shopify 頁面上方的原生 <strong>「開啟」</strong> 按鈕。",
+    "cardTitle": "專屬購物車強制執行",
+    "cardSubtitle": "即時功能 ID：",
+    "cardDesc": "當專屬團購購物車進入結帳流程時，此功能會自動移除任何免運門檻，以確保您能收取該活動的標準運費。"
   },
   "Dashboard": {
     "title": "團購活動",

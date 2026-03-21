@@ -153,6 +153,7 @@ export const action = async ({ request }) => {
     const generatedSellingPlanGroupId = spData.data.sellingPlanGroupCreate.sellingPlanGroup.id;
     const generatedSellingPlanId = spData.data.sellingPlanGroupCreate.sellingPlanGroup.sellingPlans.edges[0].node.id;
 
+    // ✨ ONLY SAVE TO DB - NO SHIPPING MOVES REQUIRED!
     const newCampaign = await db.campaign.create({
       data: {
         shop: session.shop,
@@ -171,7 +172,7 @@ export const action = async ({ request }) => {
         scope: formData.get("scope"),
         countingMethod: formData.get("countingMethod"),
         sellingPlanId: generatedSellingPlanId, 
-        sellingPlanGroupId: generatedSellingPlanGroupId 
+        sellingPlanGroupId: generatedSellingPlanGroupId,
       },
     });
 

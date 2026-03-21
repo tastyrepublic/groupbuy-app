@@ -36,18 +36,15 @@
     backdrop-filter: blur(2px);
     -webkit-backdrop-filter: blur(2px);
     display: flex; flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    z-index: 10;
-    border-radius: inherit;
+    align-items: center; justify-content: center;
+    z-index: 10; border-radius: inherit;
     animation: gb-fade-in 0.2s ease-out forwards;
   }
   .gb-spinner {
     width: 28px; height: 28px;
     border: 3px solid var(--gb-progress-bg-color, #e3e3e3);
     border-bottom-color: var(--gb-progress-color, #005bd3);
-    border-radius: 50%;
-    display: inline-block;
+    border-radius: 50%; display: inline-block;
     animation: gb-rotation 1s linear infinite;
   }
   @keyframes gb-rotation {
@@ -60,15 +57,12 @@
   }
   /* TEST A: Force 100% Width of Parent Container */
   .gb-widget {
-    display: block !important;
-    width: 100% !important;
+    display: block !important; width: 100% !important;
   }
   
   .gb-wrapper {
-    width: 100% !important;
-    max-width: 100% !important;
-    margin-left: 0 !important;
-    margin-right: 0 !important;
+    width: 100% !important; max-width: 100% !important;
+    margin-left: 0 !important; margin-right: 0 !important;
     box-sizing: border-box !important;
   }
 </style>
@@ -167,6 +161,7 @@
   data-t-msg-welcome="{{ 'general.msg_welcome_back' | t | escape }}"
   data-t-msg-sync="{{ 'general.msg_sync_note' | t | escape }}"
   data-t-err-plan="{{ 'general.error_no_plan' | t | escape }}"
+  data-t-loading="{{ 'general.loading_campaign' | t | escape }}"
   data-badge-format="{{ block.settings.badge_format }}"
   data-progress-format="{{ block.settings.progress_format }}"
   data-clock-layout="{{ block.settings.clock_layout }}"
@@ -182,7 +177,13 @@
   data-fb-projectid="groupbuy-app-635bf"
   data-scheduled-badges="{% if block.settings.scheduled_show_badges %}true{% else %}false{% endif %}"
   data-editor-preview="{{ block.settings.editor_preview_state }}"
+  data-hide-native="{{ block.settings.hide_native_buttons }}"
 >
+  {%- comment -%} ✨ EMPTY PLACEHOLDER CARD (Holds space so JS can drop the spinner inside) {%- endcomment -%}
+  {%- if product.selling_plan_groups.size > 0 -%}
+    <div class="gb-wrapper" style="background: var(--gb-bg-color, #fafafa); border-radius: var(--gb-box-radius, 8px); border: var(--gb-border, 1px solid #e3e3e3); margin-top: 20px; box-sizing: border-box; min-height: 150px; position: relative;">
+    </div>
+  {%- endif -%}
 </group-buy-widget>
 
 {% schema %}
@@ -191,6 +192,16 @@
     "target": "section",
     "stylesheet": "progress-bar.css",
     "settings": [
+      {
+        "type": "header",
+        "content": "Functionality & Integration"
+      },
+      {
+        "type": "checkbox",
+        "id": "hide_native_buttons",
+        "label": "Hide Native Add to Cart & Quantity when campaign is active",
+        "default": true
+      },
       {
         "type": "header",
         "content": "Box & Title Styling"
@@ -633,20 +644,6 @@
       },
       {
         "type": "header",
-        "content": "Quantity Selector"
-      },
-      {
-        "type": "range",
-        "id": "qty_size",
-        "min": 32,
-        "max": 64,
-        "step": 2,
-        "unit": "px",
-        "label": "Quantity Selector Height",
-        "default": 46
-      },
-      {
-        "type": "header",
         "content": "Leader Settings (Banner & Message)"
       },
       {
@@ -765,7 +762,17 @@
       },
       {
         "type": "header",
-        "content": "Button Styling"
+        "content": "Quantity & Button Styling"
+      },
+      {
+        "type": "range",
+        "id": "qty_size",
+        "min": 32,
+        "max": 64,
+        "step": 2,
+        "unit": "px",
+        "label": "Quantity Selector Height",
+        "default": 46
       },
       {
         "type": "color_background",

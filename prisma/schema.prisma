@@ -52,7 +52,6 @@ model Campaign {
 
 // --- NEW FIELDS ---
   startingParticipants Int    @default(0) // For the marketing boost
-  schedulerJobName     String?  // To track the Google Cloud Scheduler job
   sellingPlanId       String?
   sellingPlanGroupId  String?
   
@@ -92,15 +91,10 @@ model Participant {
   @@unique([orderId, productVariantId])
 }
 
-// ✨ NEW: Settings model for the merchant's app preferences
 model Settings {
   shop                        String   @id
   autoContinueSelling         Boolean  @default(true)
   disableContinueSellingOnEnd Boolean  @default(true)
-  
-  // ✨ Added: Storefront display settings
-  enableBadge                 Boolean  @default(false)
-  enableTimer                 Boolean  @default(false)
   
   createdAt                   DateTime @default(now())
   updatedAt                   DateTime @updatedAt

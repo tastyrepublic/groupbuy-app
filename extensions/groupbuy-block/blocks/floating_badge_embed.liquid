@@ -1,19 +1,39 @@
 {% schema %}
 {
-  "name": "Floating Group Buy Badge",
+  "name": "Floating Group Buy Widget",
   "target": "body",
   "settings": [
     {
-      "type": "text",
-      "id": "badge_text",
-      "label": "Badge Text",
-      "default": "🔥 Group Buy"
+      "type": "header",
+      "content": "Visibility Controls"
     },
     {
-      "type": "color",
+      "type": "checkbox",
+      "id": "show_on_collection",
+      "label": "Show on Collection & Home Pages",
+      "default": true
+    },
+    {
+      "type": "checkbox",
+      "id": "show_on_related",
+      "label": "Show in Related Products (Product Page)",
+      "default": true
+    },
+    {
+      "type": "header",
+      "content": "Badge Settings"
+    },
+    {
+      "type": "checkbox",
+      "id": "enable_badge",
+      "label": "Enable Badge",
+      "default": true
+    },
+    {
+      "type": "color_background",
       "id": "badge_bg",
-      "label": "Background Color",
-      "default": "#7C83FD"
+      "label": "Background (Color or Gradient)",
+      "default": "linear-gradient(135deg, #7C83FD 0%, #3D44B8 100%)"
     },
     {
       "type": "color",
@@ -22,69 +42,207 @@
       "default": "#FFFFFF"
     },
     {
-      "type": "text",
-      "id": "timer_prefix_text",
-      "label": "Timer Prefix Text",
-      "default": "⏳ Ends in:"
+      "type": "select",
+      "id": "badge_text_style",
+      "label": "Text Style",
+      "options": [
+        { "value": "normal", "label": "Normal" },
+        { "value": "bold", "label": "Bold" },
+        { "value": "italic", "label": "Italic" }
+      ],
+      "default": "bold"
+    },
+    {
+      "type": "range",
+      "id": "badge_radius",
+      "min": 0, "max": 20, "step": 1,
+      "unit": "px",
+      "label": "Corner Radius",
+      "default": 4
+    },
+    {
+      "type": "checkbox",
+      "id": "badge_border_enable",
+      "label": "Enable Border",
+      "default": false
+    },
+    {
+      "type": "color",
+      "id": "badge_border_color",
+      "label": "Border Color",
+      "default": "#000000"
+    },
+    {
+      "type": "range",
+      "id": "badge_border_width",
+      "min": 1, "max": 5, "step": 1,
+      "unit": "px",
+      "label": "Border Width",
+      "default": 1
+    },
+    {
+      "type": "header",
+      "content": "Badge Drop Shadow"
+    },
+    {
+      "type": "checkbox",
+      "id": "badge_shadow_enable",
+      "label": "Enable Drop Shadow",
+      "default": true
+    },
+    {
+      "type": "color",
+      "id": "badge_shadow_color",
+      "label": "Shadow Color (Use picker for Opacity)",
+      "default": "rgba(0,0,0,0.2)"
+    },
+    {
+      "type": "range",
+      "id": "badge_shadow_x",
+      "min": -10, "max": 10, "step": 1,
+      "unit": "px",
+      "label": "Shadow X Offset",
+      "default": 0
+    },
+    {
+      "type": "range",
+      "id": "badge_shadow_y",
+      "min": -10, "max": 10, "step": 1,
+      "unit": "px",
+      "label": "Shadow Y Offset",
+      "default": 2
+    },
+    {
+      "type": "range",
+      "id": "badge_shadow_blur",
+      "min": 0, "max": 20, "step": 1,
+      "unit": "px",
+      "label": "Shadow Blur",
+      "default": 4
+    },
+    {
+      "type": "header",
+      "content": "Timer Settings"
+    },
+    {
+      "type": "checkbox",
+      "id": "enable_timer",
+      "label": "Enable Timer",
+      "default": true
     },
     {
       "type": "color",
       "id": "timer_color",
       "label": "Timer Text Color",
       "default": "#D32F2F"
+    },
+    {
+      "type": "select",
+      "id": "timer_text_style",
+      "label": "Text Style",
+      "options": [
+        { "value": "normal", "label": "Normal" },
+        { "value": "bold", "label": "Bold" },
+        { "value": "italic", "label": "Italic" }
+      ],
+      "default": "bold"
     }
   ]
 }
 {% endschema %}
 
 <script>
-  document.addEventListener('DOMContentLoaded', async function() {
-    const productLinks = Array.from(document.querySelectorAll('a[href*="/products/"]'));
-    if (productLinks.length === 0) return;
+  (function() {
+    const config = {
+      showOnCollection: {% if block.settings.show_on_collection == false %}false{% else %}true{% endif %},
+      showOnRelated: {% if block.settings.show_on_related == false %}false{% else %}true{% endif %},
+      
+      enableBadge: {% if block.settings.enable_badge == false %}false{% else %}true{% endif %},
+      badgeBg: '{{ block.settings.badge_bg }}',
+      badgeBorder: {% if block.settings.badge_border_enable %}'{{ block.settings.badge_border_width }}px solid {{ block.settings.badge_border_color }}'{% else %}'none'{% endif %},
+      badgeRadius: '{{ block.settings.badge_radius }}px',
+      badgeTextStyle: '{{ block.settings.badge_text_style }}',
+      
+      // ✨ NEW: Dynamic Drop Shadow Logic
+      badgeShadow: {% if block.settings.badge_shadow_enable %}'{{ block.settings.badge_shadow_x }}px {{ block.settings.badge_shadow_y }}px {{ block.settings.badge_shadow_blur }}px {{ block.settings.badge_shadow_color }}'{% else %}'none'{% endif %},
+      
+      enableTimer: {% if block.settings.enable_timer == false %}false{% else %}true{% endif %},
+      timerTextStyle: '{{ block.settings.timer_text_style }}'
+    };
 
-    const handles = new Set();
-    productLinks.forEach(link => {
-      const match = link.href.match(/\/products\/([^?#]+)/);
-      if (match && match[1]) handles.add(match[1]);
-    });
+    const fetchedHandles = new Set();
+    let cachedCampaigns = {};
 
-    if (handles.size === 0) return;
+    async function scanAndInjectWidgets() {
+      // Visibility Checks
+      const isProductPage = window.location.pathname.includes('/products/');
+      if (isProductPage && !config.showOnRelated) return;
+      if (!isProductPage && !config.showOnCollection) return;
 
-    try {
-      const handlesQuery = Array.from(handles).join(',');
-      const response = await fetch(`/apps/gbs/storefront?handles=${handlesQuery}`);
-      const data = await response.json();
-      const activeHandlesMap = data.activeCampaignsByHandle || {}; 
+      const productLinks = Array.from(document.querySelectorAll('a[href*="/products/"]'));
+      if (productLinks.length === 0) return;
+
+      const handlesToFetch = new Set();
+
+      productLinks.forEach(link => {
+        const match = link.href.match(/\/products\/([^?#]+)/);
+        if (match && match[1]) {
+          const handle = match[1];
+          if (!fetchedHandles.has(handle)) handlesToFetch.add(handle);
+        }
+      });
+
+      if (handlesToFetch.size > 0) {
+        try {
+          const handlesQuery = Array.from(handlesToFetch).join(',');
+          const response = await fetch(`/apps/gbs/storefront?handles=${handlesQuery}`);
+          const data = await response.json();
+          
+          Object.assign(cachedCampaigns, data.activeCampaignsByHandle || {});
+          handlesToFetch.forEach(h => fetchedHandles.add(h));
+        } catch (error) {
+          console.error("Group Buy Widget Error:", error);
+          return;
+        }
+      }
 
       productLinks.forEach(link => {
         const match = link.href.match(/\/products\/([^?#]+)/);
         const handle = match ? match[1] : null;
 
-        if (handle && activeHandlesMap[handle]) {
-          const campaignDetails = activeHandlesMap[handle];
+        if (handle && window.location.pathname.includes(`/products/${handle}`)) return; 
+
+        if (handle && cachedCampaigns[handle]) {
+          const campaignDetails = cachedCampaigns[handle];
           const hasImage = link.querySelector('img');
 
-          // --- 1. THE FLOATING BADGE ---
-          if (hasImage && data.settings.enableBadge && !link.querySelector('.gbs-floating-badge')) {
+          // --- THE FLOATING BADGE ---
+          if (hasImage && config.enableBadge && !link.querySelector('.gbs-floating-badge')) {
             link.style.position = 'relative';
             link.style.display = link.style.display === 'inline' ? 'inline-block' : link.style.display; 
 
             const badge = document.createElement('div');
             badge.className = 'gbs-floating-badge';
-            badge.innerText = "{{ block.settings.badge_text }}";
+            
+            // ✨ Pulls translation directly from JSON dictionaries
+            badge.innerText = "{{ 'general.floating_badge_text' | t | escape }}";
+            
             Object.assign(badge.style, {
               position: 'absolute', top: '8px', left: '8px',
-              backgroundColor: '{{ block.settings.badge_bg }}', color: '{{ block.settings.badge_text_color }}',
-              padding: '4px 8px', borderRadius: '4px', fontWeight: 'bold', fontSize: '12px',
-              zIndex: '10', pointerEvents: 'none', boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+              background: config.badgeBg, 
+              color: '{{ block.settings.badge_text_color }}',
+              border: config.badgeBorder,
+              borderRadius: config.badgeRadius,
+              fontWeight: config.badgeTextStyle === 'bold' ? 'bold' : 'normal',
+              fontStyle: config.badgeTextStyle === 'italic' ? 'italic' : 'normal',
+              padding: '4px 8px', fontSize: '12px', zIndex: '10', pointerEvents: 'none', 
+              boxShadow: config.badgeShadow // ✨ Applies the dynamic shadow
             });
             link.appendChild(badge);
           }
 
-          // --- 2. THE COLLECTION TIMER ---
-          if (data.settings.enableTimer) {
-            
-            // ✨ SMART DOM WALKER: Climb up the HTML until we find the price or text block
+          // --- THE COLLECTION TIMER ---
+          if (config.enableTimer) {
             let cardWrapper = link;
             let priceElement = null;
             let textInfoElement = null;
@@ -92,28 +250,23 @@
             while (cardWrapper && cardWrapper !== document.body) {
               priceElement = cardWrapper.querySelector('.price, .product-item__price, [id^="price-"]');
               textInfoElement = cardWrapper.querySelector('.card__information, .card-information, .product-item__info');
-              
-              if (priceElement || textInfoElement) break; // Found the shared product card container!
-              
+              if (priceElement || textInfoElement) break; 
               cardWrapper = cardWrapper.parentElement;
             }
 
-            if (!cardWrapper || cardWrapper === document.body) {
-              cardWrapper = link.parentElement; // Ultimate fallback
-            }
+            if (!cardWrapper || cardWrapper === document.body) cardWrapper = link.parentElement;
 
-            // ✨ THE BULLETPROOF CHECK: If this entire product card has NO timer yet, add exactly one!
             if (!cardWrapper.querySelector('.gbs-collection-timer')) {
-              
               const timerContainer = document.createElement('div');
               timerContainer.className = 'gbs-collection-timer';
               Object.assign(timerContainer.style, {
                 marginTop: '6px', marginBottom: '8px', fontSize: '13px', 
-                color: '{{ block.settings.timer_color }}', fontWeight: '600', 
+                color: '{{ block.settings.timer_color }}', 
+                fontWeight: config.timerTextStyle === 'bold' ? 'bold' : 'normal', 
+                fontStyle: config.timerTextStyle === 'italic' ? 'italic' : 'normal',
                 textAlign: 'left' 
               });
 
-              // Inject it in the perfect spot
               if (priceElement && priceElement.parentNode) {
                 priceElement.parentNode.insertBefore(timerContainer, priceElement.nextSibling);
               } else if (textInfoElement) {
@@ -122,15 +275,27 @@
                 cardWrapper.appendChild(timerContainer);
               }
 
-              // Start the countdown logic
+              const startTime = new Date(campaignDetails.startDateTime).getTime();
               const endTime = new Date(campaignDetails.endDateTime).getTime();
+
               const interval = setInterval(() => {
                 const now = new Date().getTime();
-                const distance = endTime - now;
+                let distance = 0;
+                let prefix = "";
 
-                if (distance < 0) {
+                if (now < startTime) {
+                  distance = startTime - now;
+                  // ✨ Pulls translation directly from JSON dictionaries
+                  prefix = "{{ 'general.floating_starts_in' | t | escape }} ";
+                } else if (now < endTime) {
+                  distance = endTime - now;
+                  // ✨ Pulls translation directly from JSON dictionaries
+                  prefix = "{{ 'general.floating_ends_in' | t | escape }} ";
+                } else {
                   clearInterval(interval);
-                  timerContainer.innerText = "Ended";
+                  timerContainer.remove();
+                  const badgeElement = link.querySelector('.gbs-floating-badge');
+                  if (badgeElement) badgeElement.remove();
                   return;
                 }
 
@@ -139,7 +304,7 @@
                 const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
                 const seconds = Math.floor((distance % (1000 * 60)) / 1000);
 
-                let timeStr = "{{ block.settings.timer_prefix_text }} ";
+                let timeStr = prefix;
                 if (days > 0) timeStr += `${days}d `;
                 timeStr += `${hours}h ${minutes}m ${seconds}s`;
                 timerContainer.innerText = timeStr;
@@ -148,8 +313,25 @@
           }
         }
       });
-    } catch (error) {
-      console.error("Group Buy Widget Error:", error);
     }
-  });
+
+    document.addEventListener('DOMContentLoaded', scanAndInjectWidgets);
+
+    let debounceTimer;
+    const observer = new MutationObserver((mutations) => {
+      let shouldScan = false;
+      for (const mutation of mutations) {
+        if (mutation.addedNodes && mutation.addedNodes.length > 0) {
+          shouldScan = true;
+          break;
+        }
+      }
+      if (shouldScan) {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(scanAndInjectWidgets, 300);
+      }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+
+  })();
 </script>

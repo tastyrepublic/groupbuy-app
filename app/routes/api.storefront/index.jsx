@@ -11,13 +11,7 @@ export const loader = async ({ request }) => {
   const productId = url.searchParams.get("productId");
   const handlesParam = url.searchParams.get("handles");
 
-  const settings = await db.settings.findUnique({
-    where: { shop },
-    select: { enableBadge: true, enableTimer: true }
-  });
-
   let responseData = {
-    settings: settings || { enableBadge: false, enableTimer: false },
     hasActiveCampaign: false,
     campaignData: null,
     activeCampaignsByHandle: {} 
@@ -26,11 +20,18 @@ export const loader = async ({ request }) => {
   // Scenario 1: Product Page App Block
   if (productId) {
     const activeCampaign = await db.campaign.findFirst({
-      where: { shop, productId: `gid://shopify/Product/${productId}`, status: "ACTIVE" }
+      where: { 
+        shop, 
+        productId: `gid://shopify/Product/${productId}`, 
+        status: { in: ["ACTIVE", "SCHEDULED"] } // ✨ Allow both Active and Scheduled
+      }
     });
     if (activeCampaign) {
       responseData.hasActiveCampaign = true;
-      responseData.campaignData = { endDateTime: activeCampaign.endDateTime };
+      responseData.campaignData = { 
+        startDateTime: activeCampaign.startDateTime, // ✨ Send Start Time
+        endDateTime: activeCampaign.endDateTime 
+      };
     }
   }
 
@@ -38,20 +39,20 @@ export const loader = async ({ request }) => {
   if (handlesParam) {
     const handlesArray = handlesParam.split(',').map(h => h.trim());
     
-    // ✨ FAST LOOKUP: Instantly find all active campaigns matching these handles directly in your DB!
     const activeCampaigns = await db.campaign.findMany({
       where: { 
         shop, 
-        status: "ACTIVE",
-        productHandle: { in: handlesArray } // Only pull the ones on the page
+        status: { in: ["ACTIVE", "SCHEDULED"] }, // ✨ Allow both Active and Scheduled
+        productHandle: { in: handlesArray } 
       },
-      select: { productHandle: true, endDateTime: true }
+      select: { productHandle: true, startDateTime: true, endDateTime: true } // ✨ Select Start Time
     });
 
     if (activeCampaigns.length > 0) {
       for (const campaign of activeCampaigns) {
         if (campaign.productHandle) {
           responseData.activeCampaignsByHandle[campaign.productHandle] = {
+            startDateTime: campaign.startDateTime, // ✨ Pass Start Time to frontend
             endDateTime: campaign.endDateTime
           };
         }

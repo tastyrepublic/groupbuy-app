@@ -230,6 +230,7 @@ export const action = async ({ request, params }) => {
       }
     }
 
+    // Update the database
     if (Object.keys(dataToUpdate).length > 0) {
       await db.campaign.update({ where: { id: campaignId, shop: session.shop }, data: dataToUpdate });
     }

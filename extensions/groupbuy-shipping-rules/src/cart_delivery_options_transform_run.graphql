@@ -1,0 +1,19 @@
+query RunInput {
+  cart {
+    lines {
+      sellingPlanAllocation {
+        sellingPlan {
+          id
+        }
+      }
+    }
+    deliveryGroups {
+      deliveryOptions {
+        handle
+        cost {
+          amount
+        }
+      }
+    }
+  }
+}

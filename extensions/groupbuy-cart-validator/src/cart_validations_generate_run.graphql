@@ -1,0 +1,17 @@
+query RunInput {
+  cart {
+    lines {
+      sellingPlanAllocation {
+        sellingPlan {
+          id
+        }
+      }
+    }
+  }
+  # ✨ NEW: Ask Shopify for the buyer's current language!
+  localization {
+    language {
+      isoCode
+    }
+  }
+}

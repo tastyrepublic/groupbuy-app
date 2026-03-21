@@ -1,0 +1,21 @@
+api_version = "2026-01"
+
+[[extensions]]
+# ✨ Tell Shopify to fetch the translated "name" and "description" from the JSON files
+name = "t:name"
+handle = "groupbuy-cart-validator"
+
+uid = "514eeeed-242c-9bc5-05a7-e989cb774d454db13a65"
+
+type = "function"
+
+description = "t:description"
+
+  [[extensions.targeting]]
+  target = "cart.validations.generate.run"
+  input_query = "src/cart_validations_generate_run.graphql" 
+  export = "run"
+
+  [extensions.build]
+  command = ""
+  path = "dist/function.wasm"

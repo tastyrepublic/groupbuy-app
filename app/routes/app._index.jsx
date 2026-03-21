@@ -224,36 +224,22 @@ export const action = async ({ request }) => {
       return json({ error: "Campaign not found" }, { status: 404 });
     }
 
+    // 1. Delete the Selling Plan
     if (campaign.sellingPlanGroupId) {
       try {
-        const deleteSellingPlanMutation = `
+        await admin.graphql(`
           mutation sellingPlanGroupDelete($id: ID!) {
-            sellingPlanGroupDelete(id: $id) {
-              deletedSellingPlanGroupId
-              userErrors {
-                field
-                message
-              }
-            }
+            sellingPlanGroupDelete(id: $id) { deletedSellingPlanGroupId }
           }
-        `;
-
-        const deleteResponse = await admin.graphql(deleteSellingPlanMutation, {
-          variables: { id: campaign.sellingPlanGroupId }
-        });
-        
-        const deleteData = await deleteResponse.json();
-        
-        if (deleteData.data?.sellingPlanGroupDelete?.userErrors?.length > 0) {
-          console.error("Shopify failed to delete Selling Plan:", deleteData.data.sellingPlanGroupDelete.userErrors);
-        } else {
-          console.log(`✅ Successfully removed Selling Plan Group ${campaign.sellingPlanGroupId} from Shopify.`);
-        }
-      } catch (graphqlError) {
-        console.error("Network error deleting Selling Plan:", graphqlError);
+        `, { variables: { id: campaign.sellingPlanGroupId } });
+      } catch (error) {
+        console.error("Network error deleting Selling Plan:", error);
       }
     }
 
+    // ✨ ALL SHIPPING MOVE-OUT LOGIC HAS BEEN DELETED! ✨
+
+    // 2. Toggle Inventory & Delete DB
     await toggleContinueSelling(admin, session.shop, campaign.productId, campaign.id, "END");
 
     await db.campaign.delete({

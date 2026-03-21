@@ -37,6 +37,10 @@
     "msg_already_joined": "您已經加入過此團購！您的新訂單將享有相同折扣，但不會計為新的參與人數。",
     "msg_welcome_back": "歡迎回來！您的每一次購買都將幫助達到目標。",
     "msg_sync_note": "*註：進度條可能需要一分鐘才能與伺服器完全同步。",
-    "error_no_plan": "錯誤：找不到銷售計畫"
+    "error_no_plan": "錯誤：找不到銷售計畫",
+    "floating_badge_text": "團購優惠",
+    "floating_starts_in": "距開始：",
+    "floating_ends_in": "距結束：",
+    "loading_campaign": "載入活動中..."
   }
 }

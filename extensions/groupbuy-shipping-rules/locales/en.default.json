@@ -1,0 +1,4 @@
+{
+  "name": "Group Buy Shipping Guardian",
+  "description": "When ON: Group Buy items are excluded from free shipping. When OFF: Group Buy items count toward free shipping normally."
+}
