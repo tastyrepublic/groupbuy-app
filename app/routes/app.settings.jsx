@@ -185,7 +185,7 @@ export const action = async ({ request }) => {
       }
 
       await resend.emails.send({
-        from: `${shopName} <onboarding@resend.dev>`,
+        from: `${shopName} <notifications@appublic.com>`,
         to: targetEmail,
         subject: `[TEST] ${subject}`,
         html: `
@@ -430,7 +430,7 @@ export default function SettingsPage() {
                   </div>
 
                   <InlineStack gap="300" blockAlign="center">
-                    <Button onClick={() => open('shopify://admin/email_templates/order_confirmation/preview', '_top')}>
+                    <Button onClick={() => open('shopify://admin/email_templates/order_confirmation/edit', '_top')}>
                       {translations.orderConfirm?.openBtn}
                     </Button>
                     <Button variant="plain" onClick={() => window.open('mailto:support@appublic.com', '_blank')}>
