@@ -3,7 +3,7 @@ import {
   ApiVersion,
   AppDistribution,
   shopifyApp,
-  BillingInterval, // ✨ 1. Imported BillingInterval here
+  BillingInterval, 
 } from "@shopify/shopify-app-remix/server";
 import { PrismaSessionStorage } from "@shopify/shopify-app-session-storage-prisma";
 import prisma from "./db.server";
@@ -18,13 +18,47 @@ const shopify = shopifyApp({
   sessionStorage: new PrismaSessionStorage(prisma),
   distribution: AppDistribution.AppStore,
 
-  // ✨ 2. Added the billing configuration
   billing: {
     "Premium Plan": {
       amount: 27.00,
       currencyCode: "USD",
       interval: BillingInterval.Every30Days,
-      trialDays: 30, // Shopify will automatically handle the 30-day free trial
+      trialDays: 30, 
+    },
+  },
+
+  // ✨ NEW: The Install Hook (Day 1 Data Capture)
+  hooks: {
+    afterAuth: async ({ session, admin }) => {
+      // 1. Shopify registers the webhooks you put in the .toml file
+      shopify.registerWebhooks({ session });
+
+      // 2. Fetch the contact email the exact second they install
+      try {
+        const response = await admin.graphql(`
+          #graphql
+          query getContactEmailOnInstall {
+            shop {
+              contactEmail
+            }
+          }
+        `);
+        
+        const { data } = await response.json();
+        const contactEmail = data?.shop?.contactEmail;
+
+        if (contactEmail) {
+          // 3. Create their Settings row immediately
+          await prisma.settings.upsert({
+            where: { shop: session.shop },
+            update: { contactEmail: contactEmail },
+            create: { shop: session.shop, contactEmail: contactEmail },
+          });
+          console.log(`[Install Sync] Captured contactEmail for new install: ${session.shop}`);
+        }
+      } catch (error) {
+        console.error(`[Install Sync] Failed to fetch contactEmail for ${session.shop}:`, error);
+      }
     },
   },
 

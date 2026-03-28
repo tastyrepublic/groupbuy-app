@@ -1,6 +1,10 @@
 query RunInput {
   cart {
     lines {
+      # ✨ NEW: Fetch the hidden Campaign ID property!
+      attribute(key: "_groupbuy_campaign_id") {
+        value
+      }
       sellingPlanAllocation {
         sellingPlan {
           id
@@ -8,7 +12,6 @@ query RunInput {
       }
     }
   }
-  # ✨ NEW: Ask Shopify for the buyer's current language!
   localization {
     language {
       isoCode

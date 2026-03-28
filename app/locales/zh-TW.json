@@ -2,6 +2,7 @@
   "Settings": {
     "title": "設定",
     "save": "儲存",
+    "discard": "捨棄",
     "saved": "設定已成功儲存",
     "inventory": {
       "title": "庫存自動化",
@@ -11,14 +12,70 @@
       "disableLabel": "活動結束或被刪除時停用「缺貨時繼續銷售」",
       "disableHelp": "一旦活動失效，將產品恢復至其原始庫存行為。"
     },
+    "email": {
+      "title": "電子郵件通知",
+      "description": "當團購活動結束時，自動發送自訂電子郵件給顧客。這些信件將取代 Shopify 預設的取消訂單通知，以避免重複發送 (只影響團購訂單)。",
+      "successToggle": "發送「團購成功」通知信",
+      "successSubject": "成功通知信主旨",
+      "successBody": "成功通知信內容",
+      "failedToggle": "發送「團購失敗」通知信 (取代 Shopify 預設取消通知, 只影響團購訂單)",
+      "failedSubject": "失敗通知信主旨",
+      "failedBody": "失敗通知信內容",
+      "brandStyling": "品牌樣式",
+      "logoUrl": "商店標誌 (Logo) 網址",
+      "logoHelp": "請前往 Shopify 設定 > 檔案 來上傳您的標誌圖片。上傳後，複製檔案連結並貼到此處。",
+      "headerColor": "標題顏色",
+      "storeAddress": "商店實體地址",
+      "storeAddressHelp": "反垃圾郵件法規要求填寫。",
+      "templateLanguage": "模板語言：",
+      "livePreview": "即時預覽",
+      "sendTest": "發送測試信",
+      "testEmailPlaceholder": "test@email.com",
+      "emailType": "信件類型：",
+      "successTab": "成功通知",
+      "failedTab": "失敗通知",
+      "previewRole": "預覽角色：",
+      "roleLeader": "團長",
+      "roleMember": "一般買家",
+      "showPreview": "顯示電子郵件預覽",
+      "hidePreview": "隱藏電子郵件預覽",
+      "missingEmailTitle": "缺少客服電子郵件",
+      "missingEmailDesc": "我們找不到您商店公開的「寄件者電子郵件」。如果顧客回覆這些自動發送的通知信，信件可能會被退回。請新增寄件者電子郵件於您的",
+      "fixEmailBtn": "在 Shopify 中更新",
+      "activeEmailTitle": "已設定回覆地址",
+      "activeEmailDesc": "當顧客回覆這些通知信時，信件將直接轉發至您的客服信箱：",
+      "changeEmailBtn": "變更電郵地址"
+    },
+    "orderConfirm": {
+      "title": "訂單確認信設定",
+      "description": "為避免顧客在參與團購時收到令人困惑的「您的訂單已出貨」通知，Shopify 要求手動執行此一次性設定。",
+      "boxTitle": "如何更新您的 Shopify 訂單確認信",
+      "boxDesc": "Shopify 不允許應用程式自動修改電子郵件範本。請依照以下快速步驟操作：",
+      "step1": "點擊下方按鈕以開啟您的 Shopify 通知設定。",
+      "step2_1": "開啟 ",
+      "step2_strong": "Order confirmation (訂單確認)",
+      "step2_2": " 範本。",
+      "step3_1": "點擊 ",
+      "step3_strong": "Edit code (編輯程式碼)",
+      "step3_2": " (通常在右上角)。",
+      "step4_1": "按下 Ctrl + F (或 Cmd + F) 搜尋這句確切的文字：",
+      "step4_code": "We're getting your order ready to be shipped",
+      "step5_1": "反白該段完整句子，並替換為下方的程式碼區塊。然後點擊 ",
+      "step5_strong": "Save (儲存)",
+      "step5_2": "。",
+      "copyBtn": "複製程式碼",
+      "copiedToast": "程式碼已複製到剪貼簿！",
+      "openBtn": "開啟通知設定",
+      "contactSupportBtn": "聯絡客服"
+    },
     "checkout": {
       "title": "結帳保護",
-      "description": "防止顧客在單筆訂單中混合購買團購商品與一般商品，確保出貨流程順暢。",
+      "description": "防止顧客在單筆訂單中混合購買一般商品，或混合不同團購活動的商品，以確保出貨流程順暢。",
       "boxTitle": "專屬購物車限制器 (Cart Enforcer)",
       "activeTitle": "限制器已啟用",
       "inactiveTitle": "限制器未啟用",
-      "activeDesc": "嚴格禁止混合購物車結帳。",
-      "inactiveDesc": "顧客目前可以將團購商品與一般商品一起結帳。",
+      "activeDesc": "嚴格禁止混合購物車結帳 (包含一般商品或多個不同的團購活動)。",
+      "inactiveDesc": "顧客目前可以將不同團購活動的商品與一般商品混合結帳。",
       "manageBtn": "管理結帳規則",
       "configureBtn": "設定結帳規則"
     },
@@ -180,6 +237,8 @@
         "note": "注意：團長折扣與虛擬初始數量無法同時使用。啟用其中一項將自動停用另一項。",
         "leaderLabel": "團長折扣 (%)",
         "leaderDetails": "首位參與者加入團購時將獲得額外折扣。",
+        "leaderMaxQtyLabel": "最高團長折扣數量",
+        "leaderMaxQtyDetails": "如果團長購買超過此數量，超出的商品將只享有標準級別折扣。設為 0 表示無限制。",
         "startingParticipantsLabel": "初始參與者 (虛擬數量)",
         "startingItemsLabel": "初始售出數量 (虛擬數量)",
         "startingParticipantsDetails": "設定一個初始參與人數，讓團購看起來更受歡迎。",
@@ -230,6 +289,10 @@
   "Orders": {
     "title": "「{{productTitle}}」的訂單",
     "back": "活動",
+    "Dates": {
+      "startTime": "開始時間",
+      "endTime": "結束時間"
+    },
     "ProductDetails": {
       "title": "產品詳細資訊",
       "retailPrice": "零售價：",
@@ -243,6 +306,8 @@
       "empty": "目前沒有需要出貨的商品。"
     },
     "CampaignProgress": {
+      "max": "最多",
+      "qtySuffix": "件",
       "title": "活動進度",
       "progressLabels": {
         "variantItems": "規格售出總數",
@@ -305,7 +370,8 @@
         "fulfillment": {
           "UNFULFILLED": "未出貨",
           "PARTIALLY_FULFILLED": "部分出貨",
-          "FULFILLED": "已出貨"
+          "FULFILLED": "已出貨",
+          "SCHEDULED": "已排程"
         }
       },
       "empty": {

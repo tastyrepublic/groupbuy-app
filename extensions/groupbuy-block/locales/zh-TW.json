@@ -41,6 +41,8 @@
     "floating_badge_text": "團購優惠",
     "floating_starts_in": "距開始：",
     "floating_ends_in": "距結束：",
-    "loading_campaign": "載入活動中..."
+    "loading_campaign": "載入活動中...",
+    "max": "最多",
+    "max_suffix": "享有團長折扣 (其餘商品將套用已解鎖的團購折扣)"
   }
 }

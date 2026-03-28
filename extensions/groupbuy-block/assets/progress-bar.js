@@ -32,13 +32,10 @@ function storeUnsubscribe(container, unsubscribe) {
   activeConnections[timerIdKey].unsubscribe = unsubscribe;
 }
 
-// ✨ UPDATED: Hyper-Aggressive Element Hider (Nothing else removed)
 function toggleNativeElements(container, hide) {
   try {
     const shouldHide = container.dataset.hideNative === 'true';
-    console.log(`🎨 Toggling native elements. Request Hide: ${hide} | Merchant Setting: ${shouldHide}`);
     
-    // 1. Broadest possible list of Shopify Theme selectors
     const selectors = [
       '.product-form__buttons', 
       '.shopify-payment-button', 
@@ -50,13 +47,12 @@ function toggleNativeElements(container, hide) {
       '.quantity-wrapper',
       '.quantity',
       '.product-quantity',
-      'label[for^="Quantity-"]' // Catches Dawn theme labels
+      'label[for^="Quantity-"]' 
     ].join(', ');
     
     const elements = document.querySelectorAll(selectors);
     
     elements.forEach(el => {
-      // Safety check: NEVER hide our own widget elements!
       if (el.closest('.gb-widget')) return;
 
       if (hide && shouldHide) {
@@ -73,12 +69,10 @@ function toggleNativeElements(container, hide) {
       }
     });
 
-    // 2. The "Aggressive Hunt": Find the actual quantity input and hide its container
     const qtyInputs = document.querySelectorAll('input[name="quantity"]');
     qtyInputs.forEach(input => {
-      if (input.closest('.gb-widget')) return; // Ignore our own!
+      if (input.closest('.gb-widget')) return; 
       
-      // Find the immediate wrapper div (usually contains the + / - buttons)
       const wrapper = input.closest('div, fieldset, quantity-input');
       if (wrapper && wrapper !== document.body) {
         if (hide && shouldHide) {
@@ -118,22 +112,22 @@ function connectToFirebase(container, campaignData) {
      docId = `campaign_${campaignId}_variant_${simpleVariantId}`;
   }
 
-  let isInitialLoad = true;
-
   const docRef = doc(db, "campaignProgress", docId);
-  const unsubscribe = onSnapshot(docRef, (docSnap) => {
+  
+  // ✨ THE BUG FIX: Include Metadata Changes to separate Local Cache from Real Server Data
+  const unsubscribe = onSnapshot(docRef, { includeMetadataChanges: true }, (docSnap) => {
     if (docSnap.exists()) {
       const data = docSnap.data();
-      console.log("🔥 Firebase update received:", data);
       const rawFirestoreProgress = data.progress || 0;
       const startingParticipants = Number(campaignData.startingParticipants) || 0;
       
       container.dataset.rawProgress = rawFirestoreProgress + startingParticipants;
       
-      if (!isInitialLoad && Number(container.dataset.pendingContribution) > 0) {
+      // ✨ THE BUG FIX: If data is coming from the real server (not browser cache), we 
+      // know the database is fully synced, so we wipe out the pending contribution!
+      if (!docSnap.metadata.fromCache && Number(container.dataset.pendingContribution) > 0) {
         container.dataset.pendingContribution = 0;
       }
-      isInitialLoad = false;
       
       const pending = Number(container.dataset.pendingContribution) || 0;
       const totalDisplayProgress = Number(container.dataset.rawProgress) + pending;
@@ -328,7 +322,7 @@ function performAnimatedSwap(container, renderCallback) {
 
 function collapseContainer(container) {
   console.log("⏬ Collapsing Widget (No active campaign)");
-  toggleNativeElements(container, false); // ✨ RESTORE NATIVE BUTTONS
+  toggleNativeElements(container, false); 
   
   const currentWrapper = container.querySelector('.gb-wrapper');
   if (currentWrapper) {
@@ -377,8 +371,7 @@ function setupShareButton(container) {
 }
 
 function renderNotIncludedCampaign(container) {
-  console.log("✏️ Rendering Not Included view.");
-  toggleNativeElements(container, false); // ✨ RESTORE NATIVE BUTTONS
+  toggleNativeElements(container, false); 
   const notIncludedText = container.dataset.notIncludedText || 'This variant is not included in the current group buy.';
   
   container.innerHTML = `
@@ -394,19 +387,16 @@ function renderNotIncludedCampaign(container) {
 }
 
 function fetchAndRenderCampaign(container, variantId) {
-  console.log(`🔍 Fetching campaign API for variant: ${variantId}`);
   const productId = container.dataset.productId;
   const shop = container.dataset.shop;
   const simpleVariantId = variantId.toString().split('/').pop();
   
   if (!productId || !simpleVariantId || !shop) { 
-    console.warn("⚠️ Missing data for API call (productId, simpleVariantId, or shop)");
     container.innerHTML = ''; 
     return; 
   }
   
   if (container.dataset.renderedVariant === simpleVariantId) {
-    console.log("ℹ️ Variant already rendered, skipping.");
     return; 
   }
   container.dataset.renderedVariant = simpleVariantId;
@@ -414,7 +404,6 @@ function fetchAndRenderCampaign(container, variantId) {
   clearConnections(container); 
   
   if (window.Shopify && window.Shopify.designMode) {
-    console.log("🎨 Theme Editor detected. Loading Dummy Data.");
     const previewState = container.dataset.editorPreview || 'ACTIVE';
     const dummyCampaign = {
       startDateTime: new Date(Date.now() + 86400000).toISOString(),
@@ -425,7 +414,8 @@ function fetchAndRenderCampaign(container, variantId) {
         { quantity: 25, discount: 20 }
       ],
       countingMethod: 'ITEM_QUANTITY',
-      leaderDiscount: "25.0" 
+      leaderDiscount: "25.0",
+      leaderMaxQty: 5 // Simulated Leader Max Limit
     };
 
     if (previewState === 'SCHEDULED') {
@@ -449,32 +439,24 @@ function fetchAndRenderCampaign(container, variantId) {
       if (!currentWrapper.querySelector('.gb-loading-overlay')) {
           const overlay = document.createElement('div');
           overlay.className = 'gb-loading-overlay';
-          
-          // ✨ Fetch the translated text from the Liquid dataset!
           const loadingText = container.dataset.tLoading || 'Loading Campaign...';
-          
-          // ✨ Inject the spinner AND the translated text
           overlay.innerHTML = `
             <div class="gb-spinner" style="margin-bottom: 12px; width: 32px; height: 32px; border-width: 3px;"></div>
             <div style="font-size: 13px; font-weight: 400; color: var(--gb-desc-color, #5c5f62); letter-spacing: 0.3px;">${loadingText}</div>
           `;
-          
           currentWrapper.appendChild(overlay);
       }
   }
   
   const apiUrl = `/apps/gbs/campaign?productId=${productId}&variantId=${simpleVariantId}&shop=${shop}`;
-  console.log(`🌐 Calling App Proxy: ${apiUrl}`);
 
   fetch(apiUrl)
     .then(response => {
-      console.log(`📡 Response Status: ${response.status}`);
       if (response.status === 404) return null;
-      if (!response.ok) throw new Error(`API request failed with status: ${response.status}`);
+      if (!response.ok) throw new Error(`API request failed`);
       return response.json();
     })
     .then(data => {
-      console.log("✅ API Data Received:", data);
       if (data && data.campaign) {
         container.dataset.hasAnyCampaign = 'true';
         container.dataset.campaignId = data.campaign.id;
@@ -486,14 +468,11 @@ function fetchAndRenderCampaign(container, variantId) {
 
         performAnimatedSwap(container, () => {
           if (data.campaign.status === 'ACTIVE') {
-            console.log("➡️ Rendering ACTIVE Campaign");
             renderActiveCampaign(container, data);
             connectToFirebase(container, data.campaign); 
           } else if (data.campaign.status === 'SCHEDULED') {
-            console.log("➡️ Rendering SCHEDULED Campaign");
             renderScheduledCampaign(container, data.campaign);
           } else if (data.campaign.status === 'ENDED') {
-            console.log("➡️ Rendering ENDED Campaign");
             renderEndedCampaign(container, data.campaign);
           }
         });
@@ -509,14 +488,12 @@ function fetchAndRenderCampaign(container, variantId) {
       }
     })
     .catch(error => {
-      console.error(`🔴 Group Buy App Error: ${error.message}`);
       collapseContainer(container);
     });
 }
 
 function renderActiveCampaign(container, data) {
-  console.log("✏️ Drawing Active Campaign UI");
-  toggleNativeElements(container, true); // ✨ HIDE NATIVE BUTTONS
+  toggleNativeElements(container, true);
 
   const { campaign, currentProgress } = data;
   const tiers = campaign.tiers.sort((a, b) => a.quantity - b.quantity);
@@ -575,11 +552,21 @@ function renderActiveCampaign(container, data) {
   let leaderBannerHTML = '';
   if (campaign.leaderDiscount && parseFloat(campaign.leaderDiscount) > 0) {
     const leaderDiscountNum = parseFloat(campaign.leaderDiscount);
+    const maxLeaderQty = campaign.leaderMaxQty ? parseInt(campaign.leaderMaxQty, 10) : 0;
+    
     let leaderDisplay = `${leaderDiscountNum}${container.dataset.tOff || '% off'}`;
     
     if (basePrice > 0) {
       const leaderPrice = basePrice * (1 - (leaderDiscountNum / 100));
       leaderDisplay = `${leaderDiscountNum}${container.dataset.tOff || '% off'} (${container.dataset.tOnly || 'Only'} ${currencySymbol}${leaderPrice.toFixed(2)})`;
+    }
+
+    // ✨ Force the limit label and add the detailed suffix!
+    if (maxLeaderQty > 0) {
+      const maxText = container.dataset.tMax || 'Max';
+      const itemLabel = container.dataset.tItemsCount || 'items';
+      const maxSuffix = container.dataset.tMaxSuffix || 'at this price';
+      leaderDisplay += ` | ${maxText}: ${maxLeaderQty} ${itemLabel} ${maxSuffix}`;
     }
     
     const bannerTpl = container.dataset.tLeaderBanner || "👑 Group Leader Bonus: The first buyer gets {discount}!";
@@ -709,8 +696,7 @@ function renderActiveCampaign(container, data) {
 }
 
 function renderScheduledCampaign(container, campaign) {
-  console.log("✏️ Drawing Scheduled Campaign UI");
-  toggleNativeElements(container, true); // ✨ HIDE NATIVE BUTTONS
+  toggleNativeElements(container, true); 
 
   const tiers = campaign.tiers ? campaign.tiers.sort((a, b) => a.quantity - b.quantity) : [];
   const maxTier = tiers.length > 0 ? tiers[tiers.length - 1] : null;
@@ -771,12 +757,22 @@ function renderScheduledCampaign(container, campaign) {
   let leaderBannerHTML = '';
   if (campaign.leaderDiscount && parseFloat(campaign.leaderDiscount) > 0) {
     const leaderDiscountNum = parseFloat(campaign.leaderDiscount);
+    const maxLeaderQty = campaign.leaderMaxQty ? parseInt(campaign.leaderMaxQty, 10) : 0;
     let leaderDisplay = `${leaderDiscountNum}${container.dataset.tOff || '% off'}`;
     
     if (basePrice > 0) {
       const leaderPrice = basePrice * (1 - (leaderDiscountNum / 100));
       leaderDisplay = `${leaderDiscountNum}${container.dataset.tOff || '% off'} (${container.dataset.tOnly || 'Only'} ${currencySymbol}${leaderPrice.toFixed(2)})`;
     }
+
+    // ✨ Force the limit label and add the detailed suffix!
+    if (maxLeaderQty > 0) {
+      const maxText = container.dataset.tMax || 'Max';
+      const itemLabel = container.dataset.tItemsCount || 'items';
+      const maxSuffix = container.dataset.tMaxSuffix || 'at this price';
+      leaderDisplay += ` | ${maxText}: ${maxLeaderQty} ${itemLabel} ${maxSuffix}`;
+    }
+
     const bannerTpl = container.dataset.tLeaderBanner || "👑 Group Leader Bonus: The first buyer gets {discount}!";
 
     leaderBannerHTML = `
@@ -853,8 +849,7 @@ function renderScheduledCampaign(container, campaign) {
 }
 
 function renderEndedCampaign(container, campaign) {
-  console.log("✏️ Drawing Ended Campaign UI");
-  toggleNativeElements(container, false); // ✨ RESTORE NATIVE BUTTONS
+  toggleNativeElements(container, false); 
   const customTitleText = container.dataset.tTitleEnded || 'Group Buy Ended';
   const descText = container.dataset.tDescEnded || 'This group buy has officially ended. Stay tuned for the next one!';
   
@@ -880,7 +875,6 @@ function renderEndedCampaign(container, campaign) {
 }
 
 function initializeJoinButton(container, campaign) { 
-  console.log("🔘 Initializing Join Button");
   const joinButton = container.querySelector('.gb-join-button');
   const infoMessageEl = container.querySelector('.gb-info-message'); 
   
@@ -891,12 +885,21 @@ function initializeJoinButton(container, campaign) {
       const lDisc = parseFloat(campaign.leaderDiscount);
       const pPrice = parseFloat(container.dataset.productPrice || 0);
       const cSym = container.dataset.currencySymbol || '$';
+      const maxLeaderQty = campaign.leaderMaxQty ? parseInt(campaign.leaderMaxQty, 10) : 0;
       
       let securedText = `${lDisc}${container.dataset.tOff || '% off'}`;
       if (pPrice > 0) {
         const finalLockedPrice = pPrice * (1 - (lDisc / 100));
         securedText = `${lDisc}${container.dataset.tOff || '% off'} (${cSym}${finalLockedPrice.toFixed(2)})`;
       }
+      
+      // ✨ Force the limit label and add the detailed suffix!
+            if (maxLeaderQty > 0) {
+              const maxText = container.dataset.tMax || 'Max';
+              const itemLabel = container.dataset.tItemsCount || 'items';
+              const maxSuffix = container.dataset.tMaxSuffix || 'at this price';
+              securedText += ` | ${maxText}: ${maxLeaderQty} ${itemLabel} ${maxSuffix}`;
+            }
       
       const leaderMsgTpl = container.dataset.tLeaderMsg || "👑 You are the Group Leader! {discount} secured.";
       let leaderText = `<div style="background-color: var(--gb-leader-msg-bg, transparent); color: var(--gb-leader-msg-color, #D48806); font-size: var(--gb-leader-msg-size, 13px); font-style: var(--gb-leader-msg-style, normal); font-weight: bold; border: var(--gb-leader-msg-border, none); padding: var(--gb-leader-msg-padding, 0 0 8px 0); border-radius: var(--gb-leader-msg-radius, 6px); margin-bottom: 10px;">${leaderMsgTpl.replace('{discount}', securedText)}</div>`;
@@ -922,7 +925,6 @@ function initializeJoinButton(container, campaign) {
     joinButton.parentNode.replaceChild(newJoinButton, joinButton);
 
     newJoinButton.addEventListener('click', async () => {
-        console.log("🖱️ User clicked Join Button");
         const originalText = newJoinButton.textContent;
         
         newJoinButton.textContent = container.dataset.tJoining || 'Joining...';
@@ -942,7 +944,6 @@ function initializeJoinButton(container, campaign) {
         return;
       }
 
-      // ✨ Clean, direct checkout payload
         let formData = {
           'items': [{
             'id': currentVariantId,
@@ -967,14 +968,12 @@ function initializeJoinButton(container, campaign) {
           throw new Error(errorMessage);
         }
         
-        // DIRECT CHECKOUT ROUTING
         newJoinButton.textContent = container.dataset.tCheckingOut || 'Checking Out...';
         setTimeout(() => {
           window.location.href = window.Shopify.routes.root + 'checkout'; 
         }, 500);
 
       } catch (error) {
-        console.error("Cart Error:", error);
         newJoinButton.textContent = error.message; 
         
         setTimeout(() => {
@@ -989,7 +988,6 @@ function initializeJoinButton(container, campaign) {
     fetch(`/apps/gbs/check-status?productId=${productId}&customerId=${customerId}`)
       .then(res => res.json())
       .then(statusData => {
-        console.log("👤 Customer Status Fetched:", statusData);
         
         if (statusData.pendingContribution > 0) {
           container.dataset.pendingContribution = statusData.pendingContribution;
@@ -1006,11 +1004,20 @@ function initializeJoinButton(container, campaign) {
             const lDisc = parseFloat(campaign.leaderDiscount);
             const pPrice = parseFloat(container.dataset.productPrice || 0);
             const cSym = container.dataset.currencySymbol || '$';
+            const maxLeaderQty = campaign.leaderMaxQty ? parseInt(campaign.leaderMaxQty, 10) : 0;
             
             let securedText = `${lDisc}${container.dataset.tOff || '% off'}`;
             if (pPrice > 0) {
               const finalLockedPrice = pPrice * (1 - (lDisc / 100));
               securedText = `${lDisc}${container.dataset.tOff || '% off'} (${cSym}${finalLockedPrice.toFixed(2)})`;
+            }
+
+            // ✨ Force the limit label and add the detailed suffix!
+            if (maxLeaderQty > 0) {
+              const maxText = container.dataset.tMax || 'Max';
+              const itemLabel = container.dataset.tItemsCount || 'items';
+              const maxSuffix = container.dataset.tMaxSuffix || 'at this price';
+              securedText += ` | ${maxText}: ${maxLeaderQty} ${itemLabel} ${maxSuffix}`;
             }
             
             const leaderMsgTpl = container.dataset.tLeaderMsg || "👑 You are the Group Leader! {discount} secured.";
@@ -1045,7 +1052,6 @@ function initializeJoinButton(container, campaign) {
 class GroupBuyWidget extends HTMLElement {
   connectedCallback() {
     const initialVariantId = this.dataset.variantId;
-    console.log("🚀 <group-buy-widget> Element Attached. Initial Variant:", initialVariantId);
     if (initialVariantId) {
       const simpleVariantId = initialVariantId.split('/').pop();
       this.dataset.variantId = simpleVariantId;
@@ -1078,7 +1084,6 @@ function attachGlobalListeners() {
       }
       
       const variantIdString = variant.id.toString().split('/').pop();
-      console.log("🔄 Variant changed via 'variant:change' event to:", variantIdString);
       fetchAndRenderCampaign(container, variantIdString);
     } catch (e) {}
   });
@@ -1099,7 +1104,6 @@ function attachGlobalListeners() {
       clearConnections(container);
       
       const changedVariantIdString = newVariantId.toString().split('/').pop();
-      console.log("🔄 Variant changed via 'change' event to:", changedVariantIdString);
       fetchAndRenderCampaign(container, changedVariantIdString);
     } catch (e) {}
   });

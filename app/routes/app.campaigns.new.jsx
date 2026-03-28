@@ -153,6 +153,8 @@ export const action = async ({ request }) => {
     const generatedSellingPlanGroupId = spData.data.sellingPlanGroupCreate.sellingPlanGroup.id;
     const generatedSellingPlanId = spData.data.sellingPlanGroupCreate.sellingPlanGroup.sellingPlans.edges[0].node.id;
 
+    const leaderMaxQty = parseInt(formData.get("leaderMaxQty"), 10) || 0;
+    
     // ✨ ONLY SAVE TO DB - NO SHIPPING MOVES REQUIRED!
     const newCampaign = await db.campaign.create({
       data: {
@@ -166,6 +168,7 @@ export const action = async ({ request }) => {
         endDateTime: endDateTimeUtc,
         timezone: campaignTimezone,
         leaderDiscount: leaderDiscount,
+        leaderMaxQty: leaderMaxQty,
         tiersJson: JSON.stringify(tiers),
         status: "ACTIVE",
         startingParticipants: parseInt(formData.get("startingParticipants"), 10) || 0,

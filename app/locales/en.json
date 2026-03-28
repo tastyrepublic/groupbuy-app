@@ -11,14 +11,70 @@
       "disableLabel": "Disable 'Continue selling when out of stock' when campaign ends or is deleted",
       "disableHelp": "Reverts the product to its original inventory behavior once the campaign is inactive."
     },
+    "email": {
+      "title": "Email Notifications",
+      "description": "Automatically send custom emails to customers when a group buy finishes. These replace Shopify's default cancellation emails to prevent duplication (only effects group buy orders).",
+      "successToggle": "Send 'Group Buy Success' Email",
+      "successSubject": "Success Email Subject",
+      "successBody": "Success Email Body",
+      "failedToggle": "Send 'Group Buy Failed' Email (Replaces Shopify Cancellation Email, only effects group buy orders)",
+      "failedSubject": "Failed Email Subject",
+      "failedBody": "Failed Email Body",
+      "brandStyling": "Brand Styling",
+      "logoUrl": "Store Logo URL",
+      "logoHelp": "Go to Shopify Settings > Files to upload your logo image. Once uploaded, copy the file link and paste it here.",
+      "headerColor": "Header Color",
+      "storeAddress": "Store Physical Address",
+      "storeAddressHelp": "Required by anti-spam laws.",
+      "templateLanguage": "Template Language:",
+      "livePreview": "Live Preview",
+      "sendTest": "Send Test",
+      "testEmailPlaceholder": "test@email.com",
+      "emailType": "Email Type:",
+      "successTab": "Success Email",
+      "failedTab": "Failed Email",
+      "previewRole": "Preview Role:",
+      "roleLeader": "Leader",
+      "roleMember": "Regular Buyer",
+      "showPreview": "Show Email Preview",
+      "hidePreview": "Hide Email Preview",
+      "missingEmailTitle": "Missing Customer Support Email",
+      "missingEmailDesc": "We couldn't find a public 'Sender email' for your store. If customers reply to these automated emails, their messages might bounce. Please add a Sender Email in your ",
+      "fixEmailBtn": "Update in Shopify",
+      "activeEmailTitle": "Reply-To Address Configured",
+      "activeEmailDesc": "When customers reply to these notifications, the emails will be routed directly to your support inbox: ",
+      "changeEmailBtn": "Change Email"
+    },
+    "orderConfirm": {
+      "title": "Order Confirmation Setup",
+      "description": "Shopify requires this one-time manual step to prevent confusing 'Your order is shipping' emails from sending when customers join a Group Buy.",
+      "boxTitle": "How to update your Shopify Order Confirmation",
+      "boxDesc": "Shopify does not allow apps to modify email templates automatically. Please follow these quick steps:",
+      "step1": "Click the button below to open your Shopify Notification Settings.",
+      "step2_1": "Open the ",
+      "step2_strong": "Order confirmation",
+      "step2_2": " template.",
+      "step3_1": "Click ",
+      "step3_strong": "Edit code",
+      "step3_2": " (usually in the top right).",
+      "step4_1": "Press Ctrl + F (or Cmd + F) to search for this exact sentence:",
+      "step4_code": "We're getting your order ready to be shipped",
+      "step5_1": "Highlight that entire sentence and replace it with the code block below. Then click ",
+      "step5_strong": "Save",
+      "step5_2": ".",
+      "copyBtn": "Copy Code",
+      "copiedToast": "Code copied to clipboard!",
+      "openBtn": "Open Notification Settings",
+      "contactSupportBtn": "Contact Support"
+    },
     "checkout": {
       "title": "Checkout Protection",
-      "description": "Prevent customers from mixing Group Buy items with standard products in a single order to ensure clean fulfillment.",
+      "description": "Prevent customers from mixing standard products with Group Buy items, or mixing items from different campaigns in a single order to ensure clean fulfillment.",
       "boxTitle": "Exclusive Cart Enforcer",
       "activeTitle": "Enforcer is Active",
       "inactiveTitle": "Enforcer is Inactive",
-      "activeDesc": "Mixed carts are strictly prohibited.",
-      "inactiveDesc": "Customers can currently mix Group Buy and normal items.",
+      "activeDesc": "Mixed carts (standard items or multiple campaigns) are strictly prohibited.",
+      "inactiveDesc": "Customers can currently mix Group Buy items from any campaign with normal items.",
       "manageBtn": "Manage Checkout Rule",
       "configureBtn": "Configure Checkout Rule"
     },
@@ -180,6 +236,8 @@
         "note": "Note: Leader Discount and Fake Count cannot be used simultaneously. Enabling one will automatically turn off the other.",
         "leaderLabel": "Leader discount (%)",
         "leaderDetails": "First participants will receive a discount when they join a group buy.",
+        "leaderMaxQtyLabel": "Maximum Leader Discount Quantity",
+        "leaderMaxQtyDetails": "If the leader buys more than this amount, remaining items get the standard tier discount. Leave as 0 for no limit.",
         "startingParticipantsLabel": "Starting participants (fake count)",
         "startingItemsLabel": "Starting items sold (fake count)",
         "startingParticipantsDetails": "Sets a starting number of participants to make the group buy look more popular.",
@@ -230,6 +288,10 @@
   "Orders": {
     "title": "Orders for \"{{productTitle}}\"",
     "back": "Campaigns",
+    "Dates": {
+      "startTime": "Start Time",
+      "endTime": "End Time"
+    },
     "ProductDetails": {
       "title": "Product Details",
       "retailPrice": "Retail Price:",
@@ -243,6 +305,8 @@
       "empty": "No active items to fulfill."
     },
     "CampaignProgress": {
+      "max": "Max",
+      "qtySuffix": "qty",
       "title": "Campaign Progress",
       "progressLabels": {
         "variantItems": "Variant Items Sold",
@@ -305,7 +369,8 @@
         "fulfillment": {
           "UNFULFILLED": "Unfulfilled",
           "PARTIALLY_FULFILLED": "Partially Fulfilled",
-          "FULFILLED": "Fulfilled"
+          "FULFILLED": "Fulfilled",
+          "SCHEDULED": "Scheduled"
         }
       },
       "empty": {

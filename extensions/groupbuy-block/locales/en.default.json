@@ -41,6 +41,8 @@
     "floating_badge_text": "Group Buy",
     "floating_starts_in": "Starts in:",
     "floating_ends_in": "Ends in:",
-    "loading_campaign": "Loading Campaign..."
+    "loading_campaign": "Loading Campaign...",
+    "max": "Max",
+    "max_suffix": "get the Leader Price (remaining items receive the unlocked Group Buy discount)"
   }
 }

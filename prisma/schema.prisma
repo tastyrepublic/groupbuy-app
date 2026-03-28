@@ -44,6 +44,7 @@ model Campaign {
   timezone           String
   tiersJson          String
   leaderDiscount     Int
+  leaderMaxQty       Int?     @default(0)
   status             String   @default("DRAFT") // e.g., DRAFT, ACTIVE, EXPIRED
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
@@ -96,6 +97,22 @@ model Settings {
   autoContinueSelling         Boolean  @default(true)
   disableContinueSellingOnEnd Boolean  @default(true)
   
+  // ✨ Email Automation Settings
+  sendSuccessEmail            Boolean  @default(false)
+  sendFailedEmail             Boolean  @default(false)
+  successEmailSubject         String?  @default("Great news! Your Group Buy succeeded 🎉")
+  successEmailBody            String?  @default("Your group buy reached its goal! Your payment will be captured shortly, and your item is currently being processed for shipping.")
+  failedEmailSubject          String?  @default("Update on your Group Buy")
+  failedEmailBody             String?  @default("Unfortunately, the group buy did not reach its goal this time. We have canceled your order and voided the payment authorization. No funds were captured.")
+
+  // ✨ Brand & Styling Settings
+  emailLogoUrl                String?
+  emailStoreAddress           String?
+  emailHeaderColor            String?  @default("#000000")
+
+  // ✨ NEW: Enterprise Sync Field
+  contactEmail                String?
+
   createdAt                   DateTime @default(now())
   updatedAt                   DateTime @updatedAt
 }

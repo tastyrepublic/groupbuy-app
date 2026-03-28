@@ -135,26 +135,44 @@ export const loader = async ({ request, params }) => {
       variantData.data.nodes.filter(Boolean).map(variant => [variant.id, variant])
     );
 
-    rows = participants.map(p => {
+    const orderGroups = new Map();
+
+    participants.forEach(p => {
       const order = orderMap.get(p.orderId);
       const variant = variantMap.get(p.productVariantId);
-
-      return {
-        orderId: p.orderId,
-        orderName: order ? order.name : 'Unknown',
-        orderShopifyId: order ? order.id.split('/').pop() : '#',
-        createdAt: order ? order.createdAt : new Date().toISOString(),
-        customerName: order?.customer ? order.customer.displayName : 'No customer',
-        paymentStatus: order ? order.displayFinancialStatus : 'UNKNOWN',
-        fulfillmentStatus: order ? order.displayFulfillmentStatus : 'UNFULFILLED',
-        isLeader: p.isLeader,
-        quantity: p.quantity,
-        dbStatus: p.status, 
-        variantTitle: variant 
+      const variantTitle = variant 
           ? (variant.title === 'Default Title' ? 'N/A' : variant.title) 
-          : (p.productVariantId ? 'Variant not found' : 'N/A')
-      };
+          : (p.productVariantId ? 'Variant not found' : 'N/A');
+
+      if (!orderGroups.has(p.orderId)) {
+        orderGroups.set(p.orderId, {
+          orderId: p.orderId,
+          orderName: order ? order.name : 'Unknown',
+          orderShopifyId: order ? order.id.split('/').pop() : '#',
+          createdAt: order ? order.createdAt : new Date().toISOString(),
+          customerName: order?.customer ? order.customer.displayName : 'No customer',
+          paymentStatus: order ? order.displayFinancialStatus : 'UNKNOWN',
+          fulfillmentStatus: order ? order.displayFulfillmentStatus : 'UNFULFILLED',
+          isLeader: p.isLeader,
+          dbStatus: p.status, 
+          totalQuantity: 0,
+          items: [] 
+        });
+      }
+
+      const group = orderGroups.get(p.orderId);
+      group.totalQuantity += p.quantity;
+      if (p.isLeader) group.isLeader = true; 
+      
+      group.items.push({
+        variantTitle,
+        quantity: p.quantity,
+        status: p.status
+      });
     });
+
+    rows = Array.from(orderGroups.values());
+    rows.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
     const activeParticipants = participants.filter(p => p.status === 'ACTIVE' || p.status === 'SUCCESSFUL');
     
@@ -183,7 +201,11 @@ export const loader = async ({ request, params }) => {
     ProductDetails: t("Orders.ProductDetails", { returnObjects: true }),
     FulfillmentSummary: t("Orders.FulfillmentSummary", { returnObjects: true }),
     CampaignProgress: t("Orders.CampaignProgress", { returnObjects: true }),
-    ParticipantOrders: t("Orders.ParticipantOrders", { returnObjects: true })
+    ParticipantOrders: t("Orders.ParticipantOrders", { returnObjects: true }),
+    Dates: {
+      startTime: t("Orders.Dates.startTime", "Start Time"),
+      endTime: t("Orders.Dates.endTime", "End Time")
+    }
   };
 
   return json({ campaign, rows, allCampaignVariants, participantData, fulfillmentSummary, translations });
@@ -217,7 +239,7 @@ export default function CampaignOrdersPage() {
   const getBadgeTone = (status) => {
     switch (status) {
       case 'PAID': return 'success';
-      case 'PENDING': return 'warning'; // ✨ Added this line for the orange badge!
+      case 'PENDING': return 'warning';
       case 'AUTHORIZED': return 'attention';
       case 'VOIDED': return 'critical';
       default: return 'default';
@@ -303,19 +325,19 @@ export default function CampaignOrdersPage() {
   const scopeLabel = campaign.scope === 'PRODUCT' ? translations.CampaignProgress.values.productWide : translations.CampaignProgress.values.perVariant;
   const countingLabel = campaign.countingMethod === 'ITEM_QUANTITY' ? translations.CampaignProgress.values.byItem : translations.CampaignProgress.values.byParticipant;
 
-  const rowMarkup = rows.map((row, index) => {
+  // ✨ THE UX MAGIC: Full-width sub-rows, now with slimmed-down heights!
+  const rowMarkup = rows.flatMap((row, index) => {
     const isCancelled = row.dbStatus === 'CANCELLED' || ['VOIDED', 'REFUNDED', 'PARTIALLY_REFUNDED'].includes(row.paymentStatus);
     const rowStyle = isCancelled ? { opacity: 0.5, backgroundColor: 'var(--p-color-bg-surface-secondary)' } : {};
 
-    return (
-      <IndexTable.Row id={`${row.orderId}-${index}`} key={`${row.orderId}-${index}`} position={index}>
+    const hasMultipleVariants = row.items.length > 1;
+
+    // 1. THE PARENT ROW
+    const parentRow = (
+      <IndexTable.Row id={`${row.orderId}-parent-${index}`} key={`${row.orderId}-parent-${index}`} position={index}>
         <IndexTable.Cell>
           <div style={rowStyle}>
-            <Link
-              url={`shopify://admin/orders/${row.orderShopifyId}`}
-              target="_top"
-              removeUnderline
-            >
+            <Link url={`shopify://admin/orders/${row.orderShopifyId}`} target="_top" removeUnderline>
               <Text variant="bodyMd" fontWeight={isCancelled ? "regular" : "bold"} as="span" tone={isCancelled ? "subdued" : "base"}>
                 {row.orderName}
               </Text>
@@ -324,14 +346,31 @@ export default function CampaignOrdersPage() {
         </IndexTable.Cell>
         <IndexTable.Cell><div style={rowStyle}>{new Date(row.createdAt).toLocaleDateString()}</div></IndexTable.Cell>
         <IndexTable.Cell><div style={rowStyle}>{row.customerName}</div></IndexTable.Cell>
+        
+        {/* VARIANT COLUMN SUMMARY */}
         <IndexTable.Cell>
           <div style={rowStyle}>
-            <Text as="span" fontWeight={isCancelled ? "regular" : "semibold"} tone={isCancelled ? "subdued" : "base"}>
-               {row.variantTitle === 'Default Title' ? translations.ProductDetails.standardProduct : row.variantTitle}
-            </Text>
+            {hasMultipleVariants ? (
+               <Text as="span" tone="subdued">—</Text>
+            ) : (
+              <Text as="span" fontWeight={isCancelled ? "regular" : "semibold"} tone={isCancelled ? "subdued" : "base"}>
+                 {row.items[0]?.variantTitle === 'Default Title' ? translations.ProductDetails.standardProduct : row.items[0]?.variantTitle}
+              </Text>
+            )}
           </div>
         </IndexTable.Cell>
-        <IndexTable.Cell><div style={rowStyle}>{row.quantity}</div></IndexTable.Cell>
+        
+        {/* TOTAL QUANTITY */}
+        <IndexTable.Cell>
+          <div style={rowStyle}>
+            {hasMultipleVariants ? (
+               <Text as="span" tone="subdued">—</Text>
+            ) : (
+               row.totalQuantity
+            )}
+          </div>
+        </IndexTable.Cell>
+        
         <IndexTable.Cell>
           <div style={rowStyle}>
             {isCancelled ? (
@@ -340,7 +379,10 @@ export default function CampaignOrdersPage() {
               <BlockStack gap="100">
                 <Badge tone="success" icon={StarFilledIcon}>{translations.ParticipantOrders.roles.leader}</Badge>
                 {campaign.leaderDiscount > 0 && (
-                   <Text variant="bodySm" tone="subdued">{campaign.leaderDiscount}% {translations.CampaignProgress.off}</Text>
+                   <Text variant="bodySm" tone="subdued">
+                     {campaign.leaderDiscount}% {translations.CampaignProgress.off}
+                     {campaign.leaderMaxQty > 0 && ` (${translations.CampaignProgress.max}: ${campaign.leaderMaxQty} ${translations.CampaignProgress.qtySuffix})`}
+                   </Text>
                 )}
               </BlockStack>
             ) : (
@@ -350,7 +392,6 @@ export default function CampaignOrdersPage() {
         </IndexTable.Cell>
         <IndexTable.Cell>
           <div style={rowStyle}>
-            {/* ✨ Translated Payment Status Badge */}
             <Badge tone={getBadgeTone(row.paymentStatus)}>
               {translations.ParticipantOrders.badges?.payment?.[row.paymentStatus] || row.paymentStatus.replace('_', ' ')}
             </Badge>
@@ -358,7 +399,6 @@ export default function CampaignOrdersPage() {
         </IndexTable.Cell>
         <IndexTable.Cell>
           <div style={rowStyle}>
-            {/* ✨ Translated Fulfillment Status Badge */}
             <Badge tone={getFulfillmentBadgeTone(row.fulfillmentStatus)}>
               {translations.ParticipantOrders.badges?.fulfillment?.[row.fulfillmentStatus] || row.fulfillmentStatus.replace('_', ' ')}
             </Badge>
@@ -366,6 +406,54 @@ export default function CampaignOrdersPage() {
         </IndexTable.Cell>
       </IndexTable.Row>
     );
+
+    // 2. THE FULL-WIDTH CHILD ROW (Slimmer Height)
+    if (hasMultipleVariants) {
+      const childRow = (
+        <IndexTable.Row id={`${row.orderId}-variants-${index}`} key={`${row.orderId}-variants-${index}`} position={index}>
+          <IndexTable.Cell colSpan={8}>
+            {/* ✨ REDUCED PADDING: Changed paddingTop and paddingBottom to pull the row tighter */}
+            <div style={{ ...rowStyle, paddingBottom: '2px', paddingTop: '2px', paddingLeft: '16px', paddingRight: '16px' }}>
+              {/* ✨ REDUCED GAP: Changed gap from 200 to 100 for tighter badge spacing */}
+              <InlineStack gap="100" wrap blockAlign="center">
+                
+                {/* The Totals */}
+                <div style={{ marginRight: '8px', padding: '2px 0' }}>
+                  <Text as="span" tone="subdued" variant="bodySm" fontWeight="medium">
+                    ↳ {row.items.length} {translations.FulfillmentSummary.items} ({translations.ParticipantOrders.table.qty}: {row.totalQuantity})
+                  </Text>
+                </div>
+  
+                {/* The Horizontal Variant Badges */}
+                {row.items.map((item, i) => (
+                  <div key={i} style={{ 
+                    display: 'inline-flex', 
+                    alignItems: 'center', 
+                    backgroundColor: isCancelled ? 'transparent' : 'var(--p-color-bg-surface-secondary)', 
+                    border: isCancelled ? 'none' : '1px solid var(--p-color-border-subdued)',
+                    // ✨ REDUCED BADGE SIZE: Slimmer padding and slightly smaller border radius
+                    padding: '2px 8px', 
+                    borderRadius: '12px', 
+                    whiteSpace: 'nowrap'
+                  }}>
+                    <Text as="span" fontWeight={isCancelled ? "regular" : "medium"} tone={isCancelled ? "subdued" : "base"} variant="bodySm">
+                      {item.variantTitle === 'Default Title' ? translations.ProductDetails.standardProduct : item.variantTitle}
+                    </Text>
+                    {/* ✨ REDUCED FONT SIZE: Made the 'x Qty' text slightly smaller */}
+                    <span style={{ color: 'var(--p-color-text-subdued)', marginLeft: '6px', fontSize: '12px', fontWeight: 'bold' }}>× {item.quantity}</span>
+                  </div>
+                ))}
+              </InlineStack>
+            </div>
+          </IndexTable.Cell>
+        </IndexTable.Row>
+      );
+      
+      return [parentRow, childRow];
+    }
+
+    // If they only bought 1 variant, just return the standard parent row
+    return [parentRow];
   });
 
   const activeVariant = allCampaignVariants.find(v => v.id === selectedVariantId) || allCampaignVariants[0];
@@ -540,9 +628,21 @@ export default function CampaignOrdersPage() {
 
               <DescriptionList
                 items={[
+                  // ✨ NEW: Start and End Times formatted nicely
+                  { term: translations.Dates.startTime, description: new Date(campaign.startDateTime).toLocaleString() },
+                  { term: translations.Dates.endTime, description: new Date(campaign.endDateTime).toLocaleString() },
                   { term: translations.CampaignProgress.terms.scope, description: scopeLabel },
                   { term: translations.CampaignProgress.terms.countingMethod, description: countingLabel },
-                  { term: translations.CampaignProgress.terms.leaderDiscount, description: campaign.leaderDiscount > 0 ? `${campaign.leaderDiscount}% ${translations.CampaignProgress.off}` : translations.CampaignProgress.values.disabled },
+                  { 
+                    term: translations.CampaignProgress.terms.leaderDiscount, 
+                    description: campaign.leaderDiscount > 0 
+                      ? `${campaign.leaderDiscount}% ${translations.CampaignProgress.off}${
+                          campaign.leaderMaxQty > 0 
+                            ? ` (${translations.CampaignProgress.max}: ${campaign.leaderMaxQty} ${translations.CampaignProgress.qtySuffix})` 
+                            : ''
+                        }` 
+                      : translations.CampaignProgress.values.disabled 
+                  },
                   { term: translations.CampaignProgress.terms.discountAchieved, description: finalDiscountTier ? `${finalDiscountTier.discount}% ${translations.CampaignProgress.off}` : translations.CampaignProgress.values.noneMet },
                 ]}
               />
@@ -560,7 +660,7 @@ export default function CampaignOrdersPage() {
             {rows.length > 0 ? (
               <Box paddingBlockStart="400">
                 <IndexTable
-                  itemCount={rows.length}
+                  itemCount={rowMarkup.length} 
                   headings={[
                     { title: translations.ParticipantOrders.table.order },
                     { title: translations.ParticipantOrders.table.date },

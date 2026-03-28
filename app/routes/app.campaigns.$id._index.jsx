@@ -142,6 +142,11 @@ export const action = async ({ request, params }) => {
   if (!hasParticipants) {
     const leaderDiscount = parseInt(formData.get("leaderDiscount"), 10);
     if (isNaN(leaderDiscount) || leaderDiscount < 0 || leaderDiscount > 100) { errors.leaderDiscount = 'Must be 0-100.'; }
+    
+    // ✨ Parse and save the new limit
+    const leaderMaxQty = parseInt(formData.get("leaderMaxQty"), 10);
+    dataToUpdate.leaderMaxQty = isNaN(leaderMaxQty) ? 0 : leaderMaxQty;
+    
     const tiers = JSON.parse(formData.get("tiers"));
     const tierErrors = validateTiers(tiers);
     if (tierErrors.some(e => e)) { errors.tiers = tierErrors; }

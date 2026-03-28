@@ -25,7 +25,7 @@ import {
   Icon,
   ButtonGroup,
   List,
-  Tooltip, // ✨ Import the Tooltip component
+  Tooltip,
 } from '@shopify/polaris';
 import { toDate, formatInTimeZone } from 'date-fns-tz';
 import { addMinutes } from 'date-fns';
@@ -51,6 +51,7 @@ export const CampaignForm = forwardRef(({
     endDate: initialData.endDateTime || null,
     tiers: initialData.tiersJson ? JSON.parse(initialData.tiersJson) : [{ quantity: '5', discount: '10' }],
     leaderDiscount: initialData.leaderDiscount?.toString() || '0',
+    leaderMaxQty: initialData.leaderMaxQty?.toString() || '0', // ✨ NEW STATE
     startingParticipants: initialData.startingParticipants?.toString() || '0',
     timezone: initialData.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
   }));
@@ -60,6 +61,7 @@ export const CampaignForm = forwardRef(({
   const [timezone, setTimezone] = useState(initialFormState.timezone);
   const [tiers, setTiers] = useState(initialFormState.tiers);
   const [leaderDiscount, setLeaderDiscount] = useState(initialFormState.leaderDiscount);
+  const [leaderMaxQty, setLeaderMaxQty] = useState(initialFormState.leaderMaxQty); // ✨ NEW STATE
   const [startingParticipants, setStartingParticipants] = useState(initialFormState.startingParticipants);
   const [minStartDateTime, setMinStartDateTime] = useState(new Date());
   const [liveTime, setLiveTime] = useState(new Date());
@@ -150,6 +152,7 @@ export const CampaignForm = forwardRef(({
       endDate !== initialFormState.endDate ||
       JSON.stringify(tiers) !== JSON.stringify(initialFormState.tiers) ||
       leaderDiscount !== initialFormState.leaderDiscount ||
+      leaderMaxQty !== initialFormState.leaderMaxQty || // ✨ ADDED TO DIRTY CHECK
       startingParticipants !== initialFormState.startingParticipants ||
       timezone !== initialFormState.timezone ||
       JSON.stringify(selectedProducts) !== JSON.stringify(initialData.selectedProducts || []) ||
@@ -159,7 +162,7 @@ export const CampaignForm = forwardRef(({
     const isReadyTosave = hasChanged && productFetcher.state !== 'loading';
     onDirtyChange(isReadyTosave);
 
-  }, [startDate, endDate, tiers, leaderDiscount, startingParticipants, timezone, selectedProducts, initialFormState, initialData, onDirtyChange, productFetcher.state, scope, countingMethod]);
+  }, [startDate, endDate, tiers, leaderDiscount, leaderMaxQty, startingParticipants, timezone, selectedProducts, initialFormState, initialData, onDirtyChange, productFetcher.state, scope, countingMethod]);
 
   useImperativeHandle(ref, () => ({
     submit: () => formRef.current?.requestSubmit(),
@@ -169,6 +172,7 @@ export const CampaignForm = forwardRef(({
       setEndDate(initialFormState.endDate);
       setTiers(initialFormState.tiers);
       setLeaderDiscount(initialFormState.leaderDiscount);
+      setLeaderMaxQty(initialFormState.leaderMaxQty); // ✨ RESET STATE
       setStartingParticipants(initialFormState.startingParticipants);
       setTimezone(initialFormState.timezone);
       setSelectedProducts(initialData.selectedProducts || []);
@@ -312,6 +316,12 @@ export const CampaignForm = forwardRef(({
     onValueChange(setLeaderDiscount)(numericValue.toString());
   };
 
+  // ✨ NEW: Handler for Max Qty input
+  const handleLeaderMaxQtyChange = (value) => {
+    const sanitized = value.replace(/[^\d]/g, '');
+    onValueChange(setLeaderMaxQty)(sanitized === '' ? '0' : parseInt(sanitized, 10).toString());
+  };
+
   useEffect(() => {
     setTimeout(() => {
       if (leaderDiscountSwitchRef.current) leaderDiscountSwitchRef.current.checked = leaderDiscountEnabled;
@@ -448,7 +458,6 @@ export const CampaignForm = forwardRef(({
                       onClick={() => onValueChange(setScope)('PRODUCT')}
                       disabled={!!initialData.id && scope !== 'PRODUCT'} 
                     >
-                      {/* ✨ Added Tooltip with dotted underline for Product Scope */}
                       <Tooltip content={translations?.sections?.product?.scopeProductTooltip || "The discount target applies to total sales across all variants combined."}>
                         <span style={{ textDecoration: 'underline', textDecorationStyle: 'dotted', textUnderlineOffset: '3px' }}>
                           {translations?.sections?.product?.scopeProduct || "Product-wide"}
@@ -460,7 +469,6 @@ export const CampaignForm = forwardRef(({
                       onClick={() => onValueChange(setScope)('VARIANT')}
                       disabled={!!initialData.id && scope !== 'VARIANT'}
                     >
-                      {/* ✨ Added Tooltip with dotted underline for Variant Scope */}
                       <Tooltip content={translations?.sections?.product?.scopeVariantTooltip || "Each variant must reach the target individually to unlock the discount."}>
                         <span style={{ textDecoration: 'underline', textDecorationStyle: 'dotted', textUnderlineOffset: '3px' }}>
                           {translations?.sections?.product?.scopeVariant || "Per-Variant"}
@@ -477,7 +485,6 @@ export const CampaignForm = forwardRef(({
                       onClick={() => onValueChange(setCountingMethod)('PARTICIPANT')}
                       disabled={!!initialData.id && countingMethod !== 'PARTICIPANT'}
                     >
-                      {/* ✨ Added Tooltip with dotted underline for Buyers count */}
                       <Tooltip content={translations?.sections?.tiers?.countBuyersTooltip || "Progress increases by 1 for each unique order, regardless of how many items they buy."}>
                         <span style={{ textDecoration: 'underline', textDecorationStyle: 'dotted', textUnderlineOffset: '3px' }}>
                           {translations?.sections?.tiers?.countBuyers || "By Participants"}
@@ -489,7 +496,6 @@ export const CampaignForm = forwardRef(({
                       onClick={() => onValueChange(setCountingMethod)('ITEM_QUANTITY')}
                       disabled={!!initialData.id && countingMethod !== 'ITEM_QUANTITY'}
                     >
-                      {/* ✨ Added Tooltip with dotted underline for Items count */}
                       <Tooltip content={translations?.sections?.tiers?.countItemsTooltip || "Progress increases based on the actual quantity of items purchased."}>
                         <span style={{ textDecoration: 'underline', textDecorationStyle: 'dotted', textUnderlineOffset: '3px' }}>
                           {translations?.sections?.tiers?.countItems || "By Item Quantity"}
@@ -581,6 +587,8 @@ export const CampaignForm = forwardRef(({
                 <Text as="p" tone="subdued">
                   {translations?.sections?.features?.note || "Note: Leader Discount and Fake Count cannot be used simultaneously. Enabling one will automatically turn off the other."}
                 </Text>
+                
+                {/* ✨ LEADER DISCOUNT FIELDS */}
                 <s-switch
                   ref={leaderDiscountSwitchRef}
                   label={translations?.sections?.features?.leaderLabel || "Leader discount (%)"}
@@ -595,6 +603,16 @@ export const CampaignForm = forwardRef(({
                   error={formErrors?.leaderDiscount}
                   autoComplete="off"
                 />
+                <TextField
+                  label={translations?.sections?.features?.leaderMaxQtyLabel || "Maximum Leader Discount Quantity"}
+                  helpText={translations?.sections?.features?.leaderMaxQtyDetails || "If the leader buys more than this amount, remaining items get the standard tier discount. Leave as 0 for no limit."}
+                  type="number"
+                  value={leaderMaxQty.toString()}
+                  onChange={handleLeaderMaxQtyChange}
+                  disabled={!leaderDiscountEnabled || isStarted || hasParticipants}
+                  autoComplete="off"
+                />
+
                 <s-switch
                   ref={startingParticipantsSwitchRef}
                   label={startingCountLabel}
@@ -640,6 +658,12 @@ export const CampaignForm = forwardRef(({
         type="hidden" 
         name="leaderDiscount" 
         value={leaderDiscountEnabled ? (leaderDiscount || '0') : '0'} 
+      />
+      {/* ✨ HIDDEN FIELD FOR MAX QTY */}
+      <input 
+        type="hidden" 
+        name="leaderMaxQty" 
+        value={leaderDiscountEnabled ? (leaderMaxQty || '0') : '0'} 
       />
       <input type="hidden" name="scope" value={scope} />
       <input type="hidden" name="countingMethod" value={countingMethod} />

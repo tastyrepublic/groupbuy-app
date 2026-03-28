@@ -107,6 +107,7 @@ export const loader = async ({ request }) => {
         startingParticipants: campaign.startingParticipants, 
         sellingPlanId: campaign.sellingPlanId || "",
         leaderDiscount: campaign.leaderDiscount,
+        leaderMaxQty: campaign.leaderMaxQty,
       },
       currentProgress: finalProgress, 
     });

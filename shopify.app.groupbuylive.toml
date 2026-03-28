@@ -27,6 +27,10 @@ api_version = "2026-01"
   topics = [ "app/uninstalled" ]
   uri = "/webhooks/app/uninstalled"
 
+  [[webhooks.subscriptions]]
+  topics = [ "shop/update" ]
+  uri = "/webhooks/shop/update"
+
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
 scopes = "read_checkouts,read_customers,read_delivery_customizations,read_locations,read_orders,read_payment_customizations,read_payment_mandate,read_publications,read_shipping,unauthenticated_read_checkouts,unauthenticated_read_product_listings,unauthenticated_write_checkouts,write_app_proxy,write_checkouts,write_delivery_customizations,write_order_edits,write_orders,write_payment_customizations,write_payment_mandate,write_products,write_publications,write_shipping,read_validations"
