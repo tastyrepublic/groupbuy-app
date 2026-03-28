@@ -331,13 +331,14 @@ export default function SettingsPage() {
               onStateChange={setEmailData} 
             />
 
-            {/* ✨ NEW: The Foolproof Setup Guide (Search-based & Tagless Liquid) */}
+            {/* ✨ NEW: The Foolproof Setup Guide (Translate & Adapt Compatible) */}
             <Layout.AnnotatedSection 
               title={translations.orderConfirm?.title} 
               description={translations.orderConfirm?.description}
             >
               <Card>
                 <BlockStack gap="400">
+                  {/* --- STEP 1: ENGLISH TEMPLATE --- */}
                   <Text variant="headingMd" as="h2">{translations.orderConfirm?.boxTitle}</Text>
                   <Text as="p" tone="subdued">{translations.orderConfirm?.boxDesc}</Text>
                   
@@ -367,24 +368,64 @@ export default function SettingsPage() {
   {% endfor %}
 {% endfor %}
 
-{% assign user_lang = customer.locale | default: attributes.language | default: shop.locale %}
-
 {% if is_group_buy %}
-  {% if user_lang contains 'zh' %}
-    <br><br><strong>感謝您參與團購！</strong><br>您的付款方式已獲得授權。如果此活動成功達到目標，我們將會進行扣款，並在商品出貨時通知您。<br><br>如果活動未達目標，您的訂單將會自動取消，且不會向您收取任何費用。<br><br>
-  {% else %}
-    <br><br><strong>Thank you for joining the Group Buy!</strong><br>Your payment method has been authorized. If this campaign successfully reaches its goal, we will capture your payment and notify you when your item ships.<br><br>If the campaign does not reach its goal, your order will be automatically canceled and you will not be charged.<br><br>
-  {% endif %}
+  <br><br><strong>Thank you for joining the Group Buy!</strong><br>Your payment method has been authorized. If this campaign successfully reaches its goal, we will capture your payment and notify you when your item ships.<br><br>If the campaign does not reach its goal, your order will be automatically canceled and you will not be charged.<br><br>
 {% else %}
   We're getting your order ready to be shipped. We will notify you when it has been sent.
 {% endif %}`}
                     </pre>
                     <div style={{ position: 'absolute', top: '8px', right: '8px' }}>
                       <Button size="micro" onClick={() => {
-                        const code = `{% assign is_group_buy = false %}\n{% for line in subtotal_line_items %}\n  {% for property in line.properties %}\n    {% if property.first == '_groupbuy_campaign_id' %}\n      {% assign is_group_buy = true %}\n    {% endif %}\n  {% endfor %}\n{% endfor %}\n\n{% assign user_lang = customer.locale | default: attributes.language | default: shop.locale %}\n\n{% if is_group_buy %}\n  {% if user_lang contains 'zh' %}\n    <br><br><strong>感謝您參與團購！</strong><br>您的付款方式已獲得授權。如果此活動成功達到目標，我們將會進行扣款，並在商品出貨時通知您。<br><br>如果活動未達目標，您的訂單將會自動取消，且不會向您收取任何費用。<br><br>\n  {% else %}\n    <br><br><strong>Thank you for joining the Group Buy!</strong><br>Your payment method has been authorized. If this campaign successfully reaches its goal, we will capture your payment and notify you when your item ships.<br><br>If the campaign does not reach its goal, your order will be automatically canceled and you will not be charged.<br><br>\n  {% endif %}\n{% else %}\n  We're getting your order ready to be shipped. We will notify you when it has been sent.\n{% endif %}`;
+                        const code = `{% assign is_group_buy = false %}\n{% for line in subtotal_line_items %}\n  {% for property in line.properties %}\n    {% if property.first == '_groupbuy_campaign_id' %}\n      {% assign is_group_buy = true %}\n    {% endif %}\n  {% endfor %}\n{% endfor %}\n\n{% if is_group_buy %}\n  <br><br><strong>Thank you for joining the Group Buy!</strong><br>Your payment method has been authorized. If this campaign successfully reaches its goal, we will capture your payment and notify you when your item ships.<br><br>If the campaign does not reach its goal, your order will be automatically canceled and you will not be charged.<br><br>\n{% else %}\n  We're getting your order ready to be shipped. We will notify you when it has been sent.\n{% endif %}`;
                         navigator.clipboard.writeText(code);
                         app.toast.show(translations.orderConfirm?.copiedToast);
-                      }}>{translations.orderConfirm?.copyBtn}</Button>
+                      }}>{translations.orderConfirm?.copyBtnEn || "Copy English Code"}</Button>
+                    </div>
+                  </div>
+
+                  <hr style={{ border: 'none', borderTop: '1px solid var(--p-color-border-subdued)', margin: '16px 0' }} />
+
+                  {/* --- STEP 2: CHINESE TEMPLATE --- */}
+                  <Text variant="headingMd" as="h2">{translations.orderConfirm?.multiLangTitle}</Text>
+                  <Text as="p" tone="subdued">{translations.orderConfirm?.multiLangDesc}</Text>
+                  
+                  <div style={{ paddingLeft: '16px', color: 'var(--p-color-text)' }}>
+                    <ol style={{ margin: 0, padding: 0, listStylePosition: 'inside', lineHeight: '1.6' }} start="6">
+                      <li>{translations.orderConfirm?.step6}</li>
+                      <li>{translations.orderConfirm?.step7}</li>
+                      <li>
+                        {translations.orderConfirm?.step8_1}
+                        <code style={{ backgroundColor: 'var(--p-color-bg-surface-secondary)', padding: '2px 4px', borderRadius: '4px' }}>
+                          {translations.orderConfirm?.step8_code}
+                        </code>
+                        {translations.orderConfirm?.step8_2}
+                      </li>
+                    </ol>
+                  </div>
+
+                  <div style={{ position: 'relative', backgroundColor: 'var(--p-color-bg-surface-secondary)', padding: '16px', borderRadius: '8px', border: '1px solid var(--p-color-border-subdued)', overflowX: 'auto' }}>
+                    <pre style={{ margin: 0, fontSize: '13px', whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: 'monospace' }}>
+{`{% assign is_group_buy = false %}
+{% for line in subtotal_line_items %}
+  {% for property in line.properties %}
+    {% if property.first == '_groupbuy_campaign_id' %}
+      {% assign is_group_buy = true %}
+    {% endif %}
+  {% endfor %}
+{% endfor %}
+
+{% if is_group_buy %}
+  <br><br><strong>感謝您參與團購！</strong><br>您的付款方式已獲得授權。如果此活動成功達到目標，我們將會進行扣款，並在商品出貨時通知您。<br><br>如果活動未達目標，您的訂單將會自動取消，且不會向您收取任何費用。<br><br>
+{% else %}
+  您的訂單已準備好配送。我們會在寄出後通知您。
+{% endif %}`}
+                    </pre>
+                    <div style={{ position: 'absolute', top: '8px', right: '8px' }}>
+                      <Button size="micro" onClick={() => {
+                        const code = `{% assign is_group_buy = false %}\n{% for line in subtotal_line_items %}\n  {% for property in line.properties %}\n    {% if property.first == '_groupbuy_campaign_id' %}\n      {% assign is_group_buy = true %}\n    {% endif %}\n  {% endfor %}\n{% endfor %}\n\n{% if is_group_buy %}\n  <br><br><strong>感謝您參與團購！</strong><br>您的付款方式已獲得授權。如果此活動成功達到目標，我們將會進行扣款，並在商品出貨時通知您。<br><br>如果活動未達目標，您的訂單將會自動取消，且不會向您收取任何費用。<br><br>\n{% else %}\n  您的訂單已準備好配送。我們會在寄出後通知您。\n{% endif %}`;
+                        navigator.clipboard.writeText(code);
+                        app.toast.show(translations.orderConfirm?.copiedToast);
+                      }}>{translations.orderConfirm?.copyBtnZh || "Copy Chinese Code"}</Button>
                     </div>
                   </div>
 
@@ -392,7 +433,6 @@ export default function SettingsPage() {
                     <Button onClick={() => open('shopify://admin/email_templates/order_confirmation/preview', '_top')}>
                       {translations.orderConfirm?.openBtn}
                     </Button>
-                    {/* ✨ NEW: Contact Support Button */}
                     <Button variant="plain" onClick={() => window.open('mailto:support@appublic.com', '_blank')}>
                       {translations.orderConfirm?.contactSupportBtn || "Contact Support"}
                     </Button>
