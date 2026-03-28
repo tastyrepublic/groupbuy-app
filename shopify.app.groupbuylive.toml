@@ -1,7 +1,7 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
 client_id = "64f33a0c73521f54219f6883774470fa"
-name = "Group buy live store test"
+name = "Grouping"
 application_url = "https://groupbuy-app.fly.dev"
 embedded = true
 
