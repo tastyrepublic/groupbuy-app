@@ -2,7 +2,7 @@ import { json, redirect } from "@remix-run/node";
 import { useLoaderData, useFetcher, useRevalidator } from "@remix-run/react";
 import { useState, useEffect } from "react";
 import { 
-  Page, Layout, Card, BlockStack, Text, Button, ProgressBar, InlineStack, Icon, Banner, Box, Checkbox, Badge, ChoiceList
+  Page, Layout, Card, BlockStack, Text, Button, ProgressBar, InlineStack, Icon, Banner, Box, Checkbox, Badge, ChoiceList, Select
 } from "@shopify/polaris";
 import { ShieldCheckMarkIcon, AlertCircleIcon, CheckCircleIcon, InfoIcon } from '@shopify/polaris-icons';
 import { authenticate } from "../shopify.server";
@@ -106,7 +106,7 @@ export default function OnboardingWizard() {
   const revalidator = useRevalidator(); 
   
   const [step, setStep] = useState(1);
-  const totalSteps = 4; 
+  const totalSteps = 4;
 
   const [autoContinueSelling, setAutoContinueSelling] = useState([]);
   const [disableContinueSellingOnEnd, setDisableContinueSellingOnEnd] = useState([]);
@@ -116,6 +116,41 @@ export default function OnboardingWizard() {
   const [isStep1Confirmed, setIsStep1Confirmed] = useState(false);
   const [isStep2Confirmed, setIsStep2Confirmed] = useState(false);
   const [isStep3Confirmed, setIsStep3Confirmed] = useState(false);
+
+  // ✨ The new state for the code language
+  const [codeLang, setCodeLang] = useState('en'); 
+
+  const emailCodeSnippets = {
+    'en': `{% assign is_group_buy = false %}
+{% for line in subtotal_line_items %}
+  {% for property in line.properties %}
+    {% if property.first == '_groupbuy_campaign_id' %}
+      {% assign is_group_buy = true %}
+    {% endif %}
+  {% endfor %}
+{% endfor %}
+
+{% if is_group_buy %}
+  <br><br><strong>Thank you for joining the Group Buy!</strong><br>Your payment method has been authorized. If this campaign successfully reaches its goal, we will capture your payment and notify you when your item ships.<br><br>If the campaign does not reach its goal, your order will be automatically canceled and you will not be charged.<br><br>
+{% else %}
+  We're getting your order ready to be shipped. We will notify you when it has been sent.
+{% endif %}`,
+
+    'zh-TW': `{% assign is_group_buy = false %}
+{% for line in subtotal_line_items %}
+  {% for property in line.properties %}
+    {% if property.first == '_groupbuy_campaign_id' %}
+      {% assign is_group_buy = true %}
+    {% endif %}
+  {% endfor %}
+{% endfor %}
+
+{% if is_group_buy %}
+  <br><br><strong>感謝您參與團購！</strong><br>您的付款方式已獲得授權。如果此活動成功達到目標，我們將會進行請款，並在商品出貨時通知您。<br><br>如果活動未達到目標，您的訂單將會自動取消，且不會向您收取任何費用。<br><br>
+{% else %}
+  您的訂單已準備好配送，我們會在出貨後通知您。
+{% endif %}`
+  };
 
   useEffect(() => {
     if (step !== 3) return;
@@ -403,29 +438,38 @@ export default function OnboardingWizard() {
                   </ol>
                 </div>
 
-                <div style={{ position: 'relative', backgroundColor: 'var(--p-color-bg-surface-secondary)', padding: '16px', borderRadius: '8px', border: '1px solid var(--p-color-border-subdued)', overflowX: 'auto' }}>
-                  <pre style={{ margin: 0, fontSize: '13px', whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: 'monospace' }}>
-{`{% assign is_group_buy = false %}
-{% for line in subtotal_line_items %}
-  {% for property in line.properties %}
-    {% if property.first == '_groupbuy_campaign_id' %}
-      {% assign is_group_buy = true %}
-    {% endif %}
-  {% endfor %}
-{% endfor %}
+                <div style={{ position: 'relative', backgroundColor: 'var(--p-color-bg-surface-secondary)', padding: '16px', borderRadius: '8px', border: '1px solid var(--p-color-border-subdued)' }}>
+                  {/* ✨ NEW: Language Selector */}
+                  <Box paddingBlockEnd="300">
+                    <InlineStack align="space-between" blockAlign="center">
+                      <div style={{ width: '200px' }}>
+                        <Select
+                          label="Code Language"
+                          labelHidden
+                          options={[
+                            { label: 'English', value: 'en' },
+                            { label: '繁體中文 (Traditional Chinese)', value: 'zh-TW' },
+                          ]}
+                          onChange={setCodeLang}
+                          value={codeLang}
+                        />
+                      </div>
+                      <Button size="micro" onClick={() => {
+                        navigator.clipboard.writeText(emailCodeSnippets[codeLang]);
+                        shopify.toast.show(translations.orderConfirm?.copiedToast || "Code copied!");
+                      }}>
+                        {codeLang === 'zh-TW' 
+                          ? (translations.orderConfirm?.copyBtnZh || "Copy Chinese Code") 
+                          : (translations.orderConfirm?.copyBtnEn || "Copy English Code")}
+                      </Button>
+                    </InlineStack>
+                  </Box>
 
-{% if is_group_buy %}
-  <br><br><strong>Thank you for joining the Group Buy!</strong><br>Your payment method has been authorized. If this campaign successfully reaches its goal, we will capture your payment and notify you when your item ships.<br><br>If the campaign does not reach its goal, your order will be automatically canceled and you will not be charged.<br><br>
-{% else %}
-  We're getting your order ready to be shipped. We will notify you when it has been sent.
-{% endif %}`}
-                  </pre>
-                  <div style={{ position: 'absolute', top: '8px', right: '8px' }}>
-                    <Button size="micro" onClick={() => {
-                      const code = `{% assign is_group_buy = false %}\n{% for line in subtotal_line_items %}\n  {% for property in line.properties %}\n    {% if property.first == '_groupbuy_campaign_id' %}\n      {% assign is_group_buy = true %}\n    {% endif %}\n  {% endfor %}\n{% endfor %}\n\n{% if is_group_buy %}\n  <br><br><strong>Thank you for joining the Group Buy!</strong><br>Your payment method has been authorized. If this campaign successfully reaches its goal, we will capture your payment and notify you when your item ships.<br><br>If the campaign does not reach its goal, your order will be automatically canceled and you will not be charged.<br><br>\n{% else %}\n  We're getting your order ready to be shipped. We will notify you when it has been sent.\n{% endif %}`;
-                      navigator.clipboard.writeText(code);
-                      shopify.toast.show(translations.orderConfirm?.copiedToast || "Code copied!");
-                    }}>{translations.orderConfirm?.copyBtnEn || "Copy English Code"}</Button>
+                  {/* ✨ The Code Display */}
+                  <div style={{ overflowX: 'auto' }}>
+                    <pre style={{ margin: 0, fontSize: '13px', whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: 'monospace' }}>
+                      {emailCodeSnippets[codeLang]}
+                    </pre>
                   </div>
                 </div>
 

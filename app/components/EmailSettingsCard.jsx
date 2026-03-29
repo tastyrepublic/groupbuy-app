@@ -6,7 +6,6 @@ import {
 } from "@shopify/polaris";
 import { EmailIcon, ImageIcon } from '@shopify/polaris-icons';
 
-// ✨ IMPORT THE SHARED DICTIONARY
 import { SUPPORTED_LANGUAGES, EMAIL_LOCALE_DICT } from "../utils/emailDictionary";
 
 const parseSafe = (str, fallback) => { try { return JSON.parse(str); } catch { return fallback; } };
@@ -19,30 +18,53 @@ export default function EmailSettingsCard({ settings, shopEmail, translations, o
   const [activeTemplate, setActiveTemplate] = useState("SUCCESS");
   const [previewRole, setPreviewRole] = useState("LEADER"); 
   const [testEmailAddress, setTestEmailAddress] = useState(shopEmail);
-  
-  // ✨ NEW: State to control if the preview box is visible (Defaults to false/hidden)
   const [showPreview, setShowPreview] = useState(false);
 
-  const [successSubjectObj, setSuccessSubjectObj] = useState(parseSafe(settings.successEmailSubject, { "EN": "Great news! Your Group Buy succeeded 🎉", "ZH-TW": "好消息！您的團購已成功 🎉" }));
-  const [successBodyObj, setSuccessBodyObj] = useState(parseSafe(settings.successEmailBody, { "EN": "Your group buy reached its goal! Your payment will be captured shortly, and your item is currently being processed for shipping.", "ZH-TW": "您的團購已達標！我們即將為您進行扣款，商品目前正在處理中，即將為您出貨。" }));
-  const [failedSubjectObj, setFailedSubjectObj] = useState(parseSafe(settings.failedEmailSubject, { "EN": "Update on your Group Buy", "ZH-TW": "關於您的團購更新" }));
-  const [failedBodyObj, setFailedBodyObj] = useState(parseSafe(settings.failedEmailBody, { "EN": "Unfortunately, the group buy did not reach its goal this time. We have canceled your order and voided the payment authorization. No funds were captured.", "ZH-TW": "很遺憾，本次團購未達目標。我們已取消您的訂單，並取消了您的信用卡授權，不會向您收取任何費用。" }));
+  // ✨ 1. Initialize objects perfectly once
+  const initialSuccessSubject = parseSafe(settings.successEmailSubject, { "EN": "Great news! Your Group Buy succeeded 🎉", "ZH-TW": "好消息！您的團購已成功 🎉" });
+  const initialSuccessBody = parseSafe(settings.successEmailBody, { "EN": "Your group buy reached its goal! Your payment will be captured shortly, and your item is currently being processed for shipping.", "ZH-TW": "您的團購已達標！我們即將為您進行扣款，商品目前正在處理中，即將為您出貨。" });
+  const initialFailedSubject = parseSafe(settings.failedEmailSubject, { "EN": "Update on your Group Buy", "ZH-TW": "關於您的團購更新" });
+  const initialFailedBody = parseSafe(settings.failedEmailBody, { "EN": "Unfortunately, the group buy did not reach its goal this time. We have canceled your order and voided the payment authorization. No funds were captured.", "ZH-TW": "很遺憾，本次團購未達目標。我們已取消您的訂單，並取消了您的信用卡授權，不會向您收取任何費用。" });
 
-  const [sendSuccessEmail, setSendSuccessEmail] = useState(settings.sendSuccessEmail);
-  const [sendFailedEmail, setSendFailedEmail] = useState(settings.sendFailedEmail);
+  // ✨ 2. Set React State
+  const [successSubjectObj, setSuccessSubjectObj] = useState(initialSuccessSubject);
+  const [successBodyObj, setSuccessBodyObj] = useState(initialSuccessBody);
+  const [failedSubjectObj, setFailedSubjectObj] = useState(initialFailedSubject);
+  const [failedBodyObj, setFailedBodyObj] = useState(initialFailedBody);
 
-  const [emailLogoUrl, setEmailLogoUrl] = useState(settings.emailLogoUrl);
-  const [emailStoreAddress, setEmailStoreAddress] = useState(settings.emailStoreAddress);
-  const [emailHeaderColor, setEmailHeaderColor] = useState(settings.emailHeaderColor);
+  const [sendSuccessEmail, setSendSuccessEmail] = useState(settings.sendSuccessEmail ?? false);
+  const [sendFailedEmail, setSendFailedEmail] = useState(settings.sendFailedEmail ?? false);
+  const [emailLogoUrl, setEmailLogoUrl] = useState(settings.emailLogoUrl || "");
+  const [emailStoreAddress, setEmailStoreAddress] = useState(settings.emailStoreAddress || "");
+  const [emailHeaderColor, setEmailHeaderColor] = useState(settings.emailHeaderColor || "#000000");
+
+  // ✨ 3. The "Immutable Anchor" - React will compare current state ONLY to this perfectly formatted baseline
+  const [initialStateAnchor] = useState({
+    successSubject: JSON.stringify(initialSuccessSubject),
+    successBody: JSON.stringify(initialSuccessBody),
+    failedSubject: JSON.stringify(initialFailedSubject),
+    failedBody: JSON.stringify(initialFailedBody),
+    sendSuccessEmail: settings.sendSuccessEmail ?? false,
+    sendFailedEmail: settings.sendFailedEmail ?? false,
+    emailLogoUrl: settings.emailLogoUrl || "",
+    emailStoreAddress: settings.emailStoreAddress || "",
+    emailHeaderColor: settings.emailHeaderColor || "#000000"
+  });
 
   const handleUpdate = (setter, obj, lang, value) => setter({ ...obj, [lang]: value });
 
+  // ✨ 4. The Bulletproof Dirty Check
   useEffect(() => {
     const isDirty = 
-      sendSuccessEmail !== settings.sendSuccessEmail || sendFailedEmail !== settings.sendFailedEmail ||
-      emailLogoUrl !== settings.emailLogoUrl || emailStoreAddress !== settings.emailStoreAddress || emailHeaderColor !== settings.emailHeaderColor ||
-      JSON.stringify(successSubjectObj) !== settings.successEmailSubject || JSON.stringify(successBodyObj) !== settings.successEmailBody ||
-      JSON.stringify(failedSubjectObj) !== settings.failedEmailSubject || JSON.stringify(failedBodyObj) !== settings.failedEmailBody;
+      sendSuccessEmail !== initialStateAnchor.sendSuccessEmail || 
+      sendFailedEmail !== initialStateAnchor.sendFailedEmail ||
+      emailLogoUrl !== initialStateAnchor.emailLogoUrl || 
+      emailStoreAddress !== initialStateAnchor.emailStoreAddress || 
+      emailHeaderColor !== initialStateAnchor.emailHeaderColor ||
+      JSON.stringify(successSubjectObj) !== initialStateAnchor.successSubject || 
+      JSON.stringify(successBodyObj) !== initialStateAnchor.successBody ||
+      JSON.stringify(failedSubjectObj) !== initialStateAnchor.failedSubject || 
+      JSON.stringify(failedBodyObj) !== initialStateAnchor.failedBody;
 
     onStateChange({
       isDirty,
@@ -53,25 +75,19 @@ export default function EmailSettingsCard({ settings, shopEmail, translations, o
         emailLogoUrl, emailStoreAddress, emailHeaderColor
       }
     });
-  }, [sendSuccessEmail, sendFailedEmail, successSubjectObj, successBodyObj, failedSubjectObj, failedBodyObj, emailLogoUrl, emailStoreAddress, emailHeaderColor, settings, onStateChange]);
+  }, [sendSuccessEmail, sendFailedEmail, successSubjectObj, successBodyObj, failedSubjectObj, failedBodyObj, emailLogoUrl, emailStoreAddress, emailHeaderColor, initialStateAnchor, onStateChange]);
 
   useEffect(() => {
     if (fetcher.state === "idle" && fetcher.data?.success && fetcher.data.action === "test") {
-      
-      // ✨ Pull the translation and swap the placeholder
       const toastMessage = translations.email?.testSentToast?.replace('{{email}}', testEmailAddress) 
-        || `Test email sent to ${testEmailAddress}`; // Fallback just in case
-        
+        || `Test email sent to ${testEmailAddress}`; 
       app.toast.show(toastMessage);
-      
     } else if (fetcher.data?.error) {
-      // You can also translate the error message here if you want!
       const errorMessage = translations.email?.testErrorToast?.replace('{{error}}', fetcher.data.error)
         || `Error sending email: ${fetcher.data.error}`;
-        
       app.toast.show(errorMessage, { isError: true });
     }
-  }, [fetcher.state, fetcher.data, app, testEmailAddress, translations]); // Added translations to dependencies
+  }, [fetcher.state, fetcher.data, app, testEmailAddress, translations]);
 
   const handleTestEmail = () => {
     const subject = activeTemplate === "SUCCESS" ? successSubjectObj[activeLang] : failedSubjectObj[activeLang];
@@ -149,8 +165,11 @@ export default function EmailSettingsCard({ settings, shopEmail, translations, o
   const isSuccessTab = activeTemplate === "SUCCESS";
   const currentSubjectObj = isSuccessTab ? successSubjectObj : failedSubjectObj;
   const currentBodyObj = isSuccessTab ? successBodyObj : failedBodyObj;
+  
+  // ✨ 5. Fixed the typo bug right here:
   const setSubjectObj = isSuccessTab ? setSuccessSubjectObj : setFailedSubjectObj;
-  const setBodyObj = isSuccessTab ? setSuccessBodyObj : setFailedSubjectObj;
+  const setBodyObj = isSuccessTab ? setSuccessBodyObj : setFailedBodyObj; 
+  
   const isEnabled = isSuccessTab ? sendSuccessEmail : sendFailedEmail;
   const setToggle = isSuccessTab ? setSendSuccessEmail : setSendFailedEmail;
 
@@ -159,7 +178,6 @@ export default function EmailSettingsCard({ settings, shopEmail, translations, o
       <Card>
         <BlockStack gap="400">
           
-          {/* ✨ NEW: Contact Email Check Banner (Consistent with Checkout/Shipping cards) */}
           <Banner 
             tone={!settings.contactEmail ? "warning" : "info"} 
             title={!settings.contactEmail ? (translations.email?.missingEmailTitle || "Missing Customer Support Email") : (translations.email?.activeEmailTitle || "Reply-To Address Configured")}
@@ -262,7 +280,6 @@ export default function EmailSettingsCard({ settings, shopEmail, translations, o
                   autoComplete="off" 
                 />
                 
-                {/* ✨ NEW: The Toggle Button that controls the preview visibility */}
                 <div style={{ paddingTop: '8px', paddingBottom: '8px' }}>
                   <InlineStack>
                     <Button onClick={() => setShowPreview(!showPreview)}>
@@ -273,7 +290,6 @@ export default function EmailSettingsCard({ settings, shopEmail, translations, o
                   </InlineStack>
                 </div>
 
-                {/* ✨ NEW: Only render the massive preview box if showPreview is true! */}
                 {showPreview && renderPreview(currentSubjectObj[activeLang], currentBodyObj[activeLang], isSuccessTab)}
               </FormLayout>
             </Box>
