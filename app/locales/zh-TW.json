@@ -10,7 +10,15 @@
       "enableLabel": "建立活動時啟用「缺貨時繼續銷售」",
       "enableHelp": "確保即使實際庫存為零，顧客也能參與團購。",
       "disableLabel": "活動結束或被刪除時停用「缺貨時繼續銷售」",
-      "disableHelp": "一旦活動失效，將產品恢復至其原始庫存行為。"
+      "disableHelp": "一旦活動失效，將產品恢復至其原始庫存行為。",
+      "enableYesLabel": "是，自動允許缺貨時繼續銷售 (推薦)",
+      "enableYesHelp": "確保即使 Shopify 實體庫存為零，買家也能參與團購。",
+      "enableNoLabel": "否，我將手動管理",
+      "disableYesLabel": "是，自動阻擋缺貨銷售 (推薦)",
+      "disableYesHelp": "防止團購正式結束後發生意外購買。",
+      "disableNoLabel": "否，我將手動管理",
+      "pageTitle": "庫存自動化",
+      "pageDesc": "設定團購活動開始和結束時，系統應如何自動處理您的產品庫存。"
     },
     "email": {
       "title": "電子郵件通知",
@@ -21,6 +29,13 @@
       "failedToggle": "發送「團購失敗」通知信 (取代 Shopify 預設取消通知, 只影響團購訂單)",
       "failedSubject": "失敗通知信主旨",
       "failedBody": "失敗通知信內容",
+      "customizeNote": "<strong>注意：</strong>您可以稍後在主要的<strong>設定</strong>頁面中完全自訂電子郵件文字、翻譯成其他語言，以及新增您的商店標誌。",
+      "successYesLabel": "是，發送成功通知信 (推薦)",
+      "successYesHelp": "讓買家保持期待並了解他們的訂單正在處理中，這能大幅減少客服詢問。",
+      "successNoLabel": "否，不要發送",
+      "failedYesLabel": "是，發送失敗通知信 (推薦)",
+      "failedYesHelp": "自動通知買家，這樣他們就不會疑惑訂單發生了什麼事。",
+      "failedNoLabel": "否，不要發送",
       "brandStyling": "品牌樣式",
       "logoUrl": "商店標誌 (Logo) 網址",
       "logoHelp": "請前往 Shopify 設定 > 檔案 來上傳您的標誌圖片。上傳後，複製檔案連結並貼到此處。",
@@ -44,7 +59,11 @@
       "fixEmailBtn": "在 Shopify 中更新",
       "activeEmailTitle": "已設定回覆地址",
       "activeEmailDesc": "當顧客回覆這些通知信時，信件將直接轉發至您的客服信箱：",
-      "changeEmailBtn": "變更電郵地址"
+      "changeEmailBtn": "變更電郵地址",
+      "testSentToast": "測試電子郵件已發送至 {{email}}",
+      "testErrorToast": "發送電子郵件時發生錯誤: {{error}}",
+      "pageTitle": "顧客電子郵件通知",
+      "pageDesc": "選擇當團購成功達標或失敗時，是否要自動發送電子郵件通知顧客。"
     },
     "orderConfirm": {
       "title": "訂單確認信設定",
@@ -74,7 +93,9 @@
       "copyBtnZh": "複製中文程式碼",
       "copiedToast": "程式碼已複製到剪貼簿！",
       "openBtn": "開啟通知設定",
-      "contactSupportBtn": "聯絡客服"
+      "contactSupportBtn": "聯絡客服",
+      "pageTitle": "更新訂單確認信",
+      "pageDesc": "因為團購只有在達到目標時才會向顧客實際請款，您可以選擇更新 Shopify 的訂單確認信範本來向顧客說明這點，以免他們感到困惑。如果您偏好使用預設的通知信，可以直接跳過此步驟。"
     },
     "checkout": {
       "title": "結帳保護",
@@ -85,7 +106,9 @@
       "activeDesc": "嚴格禁止混合購物車結帳 (包含一般商品或多個不同的團購活動)。",
       "inactiveDesc": "顧客目前可以將不同團購活動的商品與一般商品混合結帳。",
       "manageBtn": "管理結帳規則",
-      "configureBtn": "設定結帳規則"
+      "configureBtn": "設定結帳規則",
+      "pageTitle": "啟用商店保護",
+      "pageDesc": "啟用我們專屬的 Shopify 結帳擴充功能，以確保買家無法繞過團購規則或在結帳時操縱運費選項。"
     },
     "shipping": {
       "title": "運費策略",
@@ -128,7 +151,8 @@
     "inactiveDesc2": "如要恢復保護，請使用此 Shopify 頁面上方的原生 <strong>「開啟」</strong> 按鈕。",
     "cardTitle": "專屬購物車強制執行",
     "cardSubtitle": "即時功能 ID：",
-    "cardDesc": "當專屬團購購物車進入結帳流程時，此功能會自動移除任何免運門檻，以確保您能收取該活動的標準運費。"
+    "cardDesc": "當專屬團購購物車進入結帳流程時，此功能會自動移除任何免運門檻，以確保您能收取該活動的標準運費。",
+    "ruleName": "團購運費守護者"
   },
   "Dashboard": {
     "title": "團購活動",
@@ -429,5 +453,24 @@
     "pricing": "方案與定價",
     "support": "說明與客服",
     "settings": "設定"
+  },
+  "Onboarding": {
+    "pageTitle": "歡迎使用團購外掛！🎉",
+    "welcomeTitle": "為什麼需要這些設定？",
+    "welcomeDesc": "為了確保您的顧客擁有完美的購物體驗，團購外掛需要授權來自動化您的庫存、發送自動化郵件，並保護您的結帳流程避免被濫用。",
+    "stepProgress": "設定步驟 {step} / {total}",
+    "step1ConfirmLabel": "我確認已完成我的庫存規則設定。",
+    "step1HelpLocked": "請在上方兩個庫存設定中各選擇一個選項以繼續。",
+    "step1HelpUnlocked": "已選擇選項！您可以繼續下一步。",
+    "step2ConfirmLabel": "我已決定要啟用哪些自動化電子郵件。",
+    "step2HelpLocked": "請在上方兩個電子郵件設定中各選擇一個選項以繼續。",
+    "step2HelpUnlocked": "已選擇選項！您可以繼續下一步。",
+    "step3ConfirmLabel": "我確認已啟用所需的結帳與運費擴充功能。",
+    "step3HelpLocked": "請啟用上方的兩個擴充功能以解鎖此核取方塊。",
+    "step3HelpUnlocked": "兩個擴充功能皆已啟用！您可以繼續下一步。",
+    "optionalBadge": "可自行決定，但建議完成以獲得最佳體驗。",
+    "prevBtn": "上一步",
+    "nextBtn": "下一步",
+    "completeBtn": "完成設定並進入儀表板"
   }
 }

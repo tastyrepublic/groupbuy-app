@@ -9,7 +9,15 @@
       "enableLabel": "Enable 'Continue selling when out of stock' on campaign creation",
       "enableHelp": "Ensures customers can join the group buy even if physical inventory is zero.",
       "disableLabel": "Disable 'Continue selling when out of stock' when campaign ends or is deleted",
-      "disableHelp": "Reverts the product to its original inventory behavior once the campaign is inactive."
+      "disableHelp": "Reverts the product to its original inventory behavior once the campaign is inactive.",
+      "enableYesLabel": "Yes, automatically allow out-of-stock sales (Recommended)",
+      "enableYesHelp": "Ensures buyers can always join the group buy, even if your Shopify inventory hits zero.",
+      "enableNoLabel": "No, I will manage it manually",
+      "disableYesLabel": "Yes, automatically block out-of-stock sales (Recommended)",
+      "disableYesHelp": "Prevents accidental purchases after the group buy has officially closed.",
+      "disableNoLabel": "No, I will manage it manually",
+      "pageTitle": "Inventory Automation",
+      "pageDesc": "Configure how the app handles your product inventory when a campaign starts and ends."
     },
     "email": {
       "title": "Email Notifications",
@@ -20,6 +28,13 @@
       "failedToggle": "Send 'Group Buy Failed' Email (Replaces Shopify Cancellation Email, only effects group buy orders)",
       "failedSubject": "Failed Email Subject",
       "failedBody": "Failed Email Body",
+      "customizeNote": "<strong>Note:</strong> You can fully customize the email text, translate it into other languages, and add your store logo later in the main <strong>Settings</strong> page.",
+      "successYesLabel": "Yes, send success emails (Recommended)",
+      "successYesHelp": "Keeps buyers excited and informed that their order is being processed, significantly reducing support tickets.",
+      "successNoLabel": "No, do not send",
+      "failedYesLabel": "Yes, send failed emails (Recommended)",
+      "failedYesHelp": "Automatically notifies buyers so they aren't left wondering what happened to their order.",
+      "failedNoLabel": "No, do not send",
       "brandStyling": "Brand Styling",
       "logoUrl": "Store Logo URL",
       "logoHelp": "Go to Shopify Settings > Files to upload your logo image. Once uploaded, copy the file link and paste it here.",
@@ -43,7 +58,11 @@
       "fixEmailBtn": "Update in Shopify",
       "activeEmailTitle": "Reply-To Address Configured",
       "activeEmailDesc": "When customers reply to these notifications, the emails will be routed directly to your support inbox: ",
-      "changeEmailBtn": "Change Email"
+      "changeEmailBtn": "Change Email",
+      "testSentToast": "Test email sent to {{email}}",
+      "testErrorToast": "Error sending email: {{error}}",
+      "pageTitle": "Customer Email Notifications",
+      "pageDesc": "Choose whether you want the app to automatically notify customers when a group buy reaches its goal or fails."
     },
     "orderConfirm": {
       "title": "Order Confirmation Setup",
@@ -73,7 +92,9 @@
       "copyBtnZh": "Copy Chinese Code",
       "copiedToast": "Code copied to clipboard!",
       "openBtn": "Open Notification Settings",
-      "contactSupportBtn": "Contact Support"
+      "contactSupportBtn": "Contact Support",
+      "pageTitle": "Update Order Confirmations",
+      "pageDesc": "Because Group Buys only capture payments if they reach their goal, you can optionally update your Shopify Order Confirmation email template to explain this to customers so they don't get confused. If you prefer your standard emails, you can skip this step."
     },
     "checkout": {
       "title": "Checkout Protection",
@@ -84,7 +105,9 @@
       "activeDesc": "Mixed carts (standard items or multiple campaigns) are strictly prohibited.",
       "inactiveDesc": "Customers can currently mix Group Buy items from any campaign with normal items.",
       "manageBtn": "Manage Checkout Rule",
-      "configureBtn": "Configure Checkout Rule"
+      "configureBtn": "Configure Checkout Rule",
+      "pageTitle": "Activate Store Protection",
+      "pageDesc": "Enable our native Shopify Functions to ensure buyers cannot bypass group buy rules or manipulate shipping options at checkout."
     },
     "shipping": {
       "title": "Shipping Strategy",
@@ -428,5 +451,24 @@
     "pricing": "Pricing",
     "support": "Support",
     "settings": "Settings"
+  },
+  "Onboarding": {
+    "pageTitle": "Welcome to Group Buy! 🎉",
+    "welcomeTitle": "Why do we need this setup?",
+    "welcomeDesc": "To ensure your customers have a flawless experience, Group Buy needs permission to automate your inventory, send automated emails, and protect your checkout from abuse.",
+    "stepProgress": "Setup Step {step} of {total}",
+    "step1ConfirmLabel": "I confirm I have set my desired inventory rules.",
+    "step1HelpLocked": "Please select an option for both inventory settings above to proceed.",
+    "step1HelpUnlocked": "Options selected! You may proceed.",
+    "step2ConfirmLabel": "I have decided which automatic emails to enable.",
+    "step2HelpLocked": "Please select an option for both email settings above to proceed.",
+    "step2HelpUnlocked": "Options selected! You may proceed.",
+    "step3ConfirmLabel": "I confirm I have enabled the required Checkout and Shipping extensions.",
+    "step3HelpLocked": "Please activate both extensions above to unlock this checkbox.",
+    "step3HelpUnlocked": "Both extensions are active! You may proceed.",
+    "optionalBadge": "Optional, but recommended for best experience.",
+    "prevBtn": "Previous Step",
+    "nextBtn": "Next Step",
+    "completeBtn": "Complete Setup & Enter Dashboard"
   }
 }

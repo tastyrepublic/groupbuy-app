@@ -97,7 +97,12 @@ export const action = async ({ request, params }) => {
   
   const { id } = params; 
   const submittedCustomizationId = formData.get("customizationId");
-  const staticTitle = "Group Buy Exclusive Cart Guardian";  
+  
+  // ✨ 1. Get the translation function inside the action
+  const { t } = await getI18n(request);
+  
+  // ✨ 2. Replace the hardcoded string with your dynamic translation!
+  const staticTitle = t("ShippingGuardian.ruleName", "Group Buy Shipping Guardian");  
 
   // 1. Get the REAL ID before attempting to save
   const realFunctionId = await getRealFunctionId(admin);

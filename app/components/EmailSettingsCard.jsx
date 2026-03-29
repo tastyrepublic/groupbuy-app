@@ -57,11 +57,21 @@ export default function EmailSettingsCard({ settings, shopEmail, translations, o
 
   useEffect(() => {
     if (fetcher.state === "idle" && fetcher.data?.success && fetcher.data.action === "test") {
-      app.toast.show("Test email sent to " + testEmailAddress);
+      
+      // ✨ Pull the translation and swap the placeholder
+      const toastMessage = translations.email?.testSentToast?.replace('{{email}}', testEmailAddress) 
+        || `Test email sent to ${testEmailAddress}`; // Fallback just in case
+        
+      app.toast.show(toastMessage);
+      
     } else if (fetcher.data?.error) {
-      app.toast.show("Error sending email: " + fetcher.data.error, { isError: true });
+      // You can also translate the error message here if you want!
+      const errorMessage = translations.email?.testErrorToast?.replace('{{error}}', fetcher.data.error)
+        || `Error sending email: ${fetcher.data.error}`;
+        
+      app.toast.show(errorMessage, { isError: true });
     }
-  }, [fetcher.state, fetcher.data, app, testEmailAddress]);
+  }, [fetcher.state, fetcher.data, app, testEmailAddress, translations]); // Added translations to dependencies
 
   const handleTestEmail = () => {
     const subject = activeTemplate === "SUCCESS" ? successSubjectObj[activeLang] : failedSubjectObj[activeLang];

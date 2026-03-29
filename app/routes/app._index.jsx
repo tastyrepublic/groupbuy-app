@@ -40,8 +40,14 @@ import { toggleContinueSelling } from "../utils/inventory.server.js";
 // ✨ 1. Import your i18n utility
 import { getI18n } from "../utils/i18n.server.js";
 
+import { requireSetup } from "../utils/guard.server.js";
+
 export const loader = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
+
+// ✨ Deploy the Guard! If they aren't onboarded, the code stops here.
+  await requireSetup(session, request);
+
   const { t } = await getI18n(request);
 
   // 1. Calculate the page and total campaigns FIRST

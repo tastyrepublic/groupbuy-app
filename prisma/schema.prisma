@@ -113,6 +113,9 @@ model Settings {
   // ✨ NEW: Enterprise Sync Field
   contactEmail                String?
 
+  // ✨ NEW: Onboarding Gatekeeper
+  isOnboarded                 Boolean  @default(false)
+
   createdAt                   DateTime @default(now())
   updatedAt                   DateTime @updatedAt
 }

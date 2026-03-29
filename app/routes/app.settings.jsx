@@ -11,10 +11,15 @@ import { useAppBridge, SaveBar } from "@shopify/app-bridge-react"; // ✨ Added 
 import { getI18n } from "../utils/i18n.server.js";
 import { Resend } from "resend"; 
 import EmailSettingsCard from "../components/EmailSettingsCard";
-import { EMAIL_LOCALE_DICT } from "../utils/emailDictionary"; 
+import { EMAIL_LOCALE_DICT } from "../utils/emailDictionary";
+import { requireSetup } from "../utils/guard.server.js";
 
 export const loader = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
+
+  // ✨ Deploy the Guard!
+  await requireSetup(session, request);
+
   let dbSettings = await db.settings.findUnique({ where: { shop: session.shop } });
 
   const response = await admin.graphql(`

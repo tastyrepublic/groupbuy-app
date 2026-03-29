@@ -10,11 +10,17 @@ import db from "../db.server";
 import { validateTiers } from "../components/validation";
 import { toggleContinueSelling } from "../utils/inventory.server.js";
 
+import { requireSetup } from "../utils/guard.server.js";
+
 import { getI18n } from "../utils/i18n.server.js";
 
 // ✨ 1. Update the loader to grab the whole dictionary object
 export const loader = async ({ request }) => {
-  await authenticate.admin(request);
+  const { session } = await authenticate.admin(request);
+
+  // ✨ Deploy the Guard!
+  await requireSetup(session, request);
+
   const { t } = await getI18n(request);
 
   return json({
