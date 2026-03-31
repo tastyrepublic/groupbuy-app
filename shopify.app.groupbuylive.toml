@@ -16,6 +16,10 @@ api_version = "2026-01"
   uri = "pubsub://groupbuy-app-635bf:shopify-orders-create"
 
   [[webhooks.subscriptions]]
+  topics = [ "orders/updated" ]
+  uri = "pubsub://groupbuy-app-635bf:shopify-orders-updated"
+
+  [[webhooks.subscriptions]]
   topics = [ "app/scopes_update" ]
   uri = "/webhooks/app/scopes_update"
 
