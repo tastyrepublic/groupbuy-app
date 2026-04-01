@@ -11,7 +11,7 @@ import { useAppBridge, SaveBar } from "@shopify/app-bridge-react"; // ✨ Added 
 import { getI18n } from "../utils/i18n.server.js";
 import { Resend } from "resend"; 
 import EmailSettingsCard from "../components/EmailSettingsCard";
-import { EMAIL_LOCALE_DICT } from "../utils/emailDictionary";
+import { EMAIL_LOCALE_DICT, DEFAULT_EMAIL_TEMPLATES } from "../utils/emailDictionary";
 import { requireSetup } from "../utils/guard.server.js";
 
 export const loader = async ({ request }) => {
@@ -48,27 +48,22 @@ export const loader = async ({ request }) => {
     console.log(`[Self-Healing] Backfilled contactEmail for ${session.shop}`);
   }
 
+  // ✨ Notice how the hardcoded strings are completely gone!
   const addr = data?.shop?.billingAddress;
   const fallbackAddress = addr ? [addr.address1, addr.city, addr.country, addr.zip].filter(Boolean).join(', ') : "";
-
-  const defaultSubject = JSON.stringify({ "EN": "Great news! Your Group Buy succeeded 🎉", "ZH-TW": "好消息！您的團購已成功 🎉" });
-  const defaultBody = JSON.stringify({ "EN": "Your group buy reached its goal! Your payment will be captured shortly, and your order is currently being processed for shipping.", "ZH-TW": "您的團購已達標！我們即將為您進行扣款，訂單目前正在處理中，商品到貨後將為您出貨。" });
-  const defaultFailSubject = JSON.stringify({ "EN": "Update on your Group Buy", "ZH-TW": "關於您的團購更新" });
-  const defaultFailBody = JSON.stringify({ "EN": "Unfortunately, the group buy did not reach its goal this time. We have canceled your order and voided the payment authorization. No funds were captured.", "ZH-TW": "很遺憾，本次團購未達目標。我們已取消您的訂單，並取消了您的信用卡授權，不會向您收取任何費用。" });
 
   const settings = {
     autoContinueSelling: dbSettings?.autoContinueSelling ?? true,
     disableContinueSellingOnEnd: dbSettings?.disableContinueSellingOnEnd ?? true,
     sendSuccessEmail: dbSettings?.sendSuccessEmail ?? false,
     sendFailedEmail: dbSettings?.sendFailedEmail ?? false,
-    successEmailSubject: dbSettings?.successEmailSubject ?? defaultSubject,
-    successEmailBody: dbSettings?.successEmailBody ?? defaultBody,
-    failedEmailSubject: dbSettings?.failedEmailSubject ?? defaultFailSubject,
-    failedEmailBody: dbSettings?.failedEmailBody ?? defaultFailBody,
+    successEmailSubject: dbSettings?.successEmailSubject ?? JSON.stringify(DEFAULT_EMAIL_TEMPLATES.successSubject),
+    successEmailBody: dbSettings?.successEmailBody ?? JSON.stringify(DEFAULT_EMAIL_TEMPLATES.successBody),
+    failedEmailSubject: dbSettings?.failedEmailSubject ?? JSON.stringify(DEFAULT_EMAIL_TEMPLATES.failedSubject),
+    failedEmailBody: dbSettings?.failedEmailBody ?? JSON.stringify(DEFAULT_EMAIL_TEMPLATES.failedBody),
     emailLogoUrl: dbSettings?.emailLogoUrl ?? "",
     emailStoreAddress: dbSettings?.emailStoreAddress ?? fallbackAddress,
     emailHeaderColor: dbSettings?.emailHeaderColor ?? "#000000",
-    // ✨ NEW: Pass the safely synced email to the frontend
     contactEmail: dbSettings?.contactEmail || liveContactEmail 
   };
 

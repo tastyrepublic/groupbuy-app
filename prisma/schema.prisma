@@ -100,10 +100,10 @@ model Settings {
   // ✨ Email Automation Settings
   sendSuccessEmail            Boolean  @default(false)
   sendFailedEmail             Boolean  @default(false)
-  successEmailSubject         String?  @default("Great news! Your Group Buy succeeded 🎉")
-  successEmailBody            String?  @default("Your group buy reached its goal! Your payment will be captured shortly, and your item is currently being processed for shipping.")
-  failedEmailSubject          String?  @default("Update on your Group Buy")
-  failedEmailBody             String?  @default("Unfortunately, the group buy did not reach its goal this time. We have canceled your order and voided the payment authorization. No funds were captured.")
+  successEmailSubject         String?
+  successEmailBody            String?  @db.Text
+  failedEmailSubject          String?
+  failedEmailBody             String?  @db.Text
 
   // ✨ Brand & Styling Settings
   emailLogoUrl                String?

@@ -6,7 +6,7 @@ import {
 } from "@shopify/polaris";
 import { EmailIcon, ImageIcon } from '@shopify/polaris-icons';
 
-import { SUPPORTED_LANGUAGES, EMAIL_LOCALE_DICT } from "../utils/emailDictionary";
+import { SUPPORTED_LANGUAGES, EMAIL_LOCALE_DICT, DEFAULT_EMAIL_TEMPLATES } from "../utils/emailDictionary";
 
 const parseSafe = (str, fallback) => { try { return JSON.parse(str); } catch { return fallback; } };
 
@@ -20,11 +20,11 @@ export default function EmailSettingsCard({ settings, shopEmail, translations, o
   const [testEmailAddress, setTestEmailAddress] = useState(shopEmail);
   const [showPreview, setShowPreview] = useState(false);
 
-  // ✨ 1. Initialize objects perfectly once
-  const initialSuccessSubject = parseSafe(settings.successEmailSubject, { "EN": "Great news! Your Group Buy succeeded 🎉", "ZH-TW": "好消息！您的團購已成功 🎉" });
-  const initialSuccessBody = parseSafe(settings.successEmailBody, { "EN": "Your group buy reached its goal! Your payment will be captured shortly, and your item is currently being processed for shipping.", "ZH-TW": "您的團購已達標！我們即將為您進行扣款，商品目前正在處理中，即將為您出貨。" });
-  const initialFailedSubject = parseSafe(settings.failedEmailSubject, { "EN": "Update on your Group Buy", "ZH-TW": "關於您的團購更新" });
-  const initialFailedBody = parseSafe(settings.failedEmailBody, { "EN": "Unfortunately, the group buy did not reach its goal this time. We have canceled your order and voided the payment authorization. No funds were captured.", "ZH-TW": "很遺憾，本次團購未達目標。我們已取消您的訂單，並取消了您的信用卡授權，不會向您收取任何費用。" });
+  // ✨ 1. Initialize objects perfectly using the Single Source of Truth
+  const initialSuccessSubject = parseSafe(settings.successEmailSubject, DEFAULT_EMAIL_TEMPLATES.successSubject);
+  const initialSuccessBody = parseSafe(settings.successEmailBody, DEFAULT_EMAIL_TEMPLATES.successBody);
+  const initialFailedSubject = parseSafe(settings.failedEmailSubject, DEFAULT_EMAIL_TEMPLATES.failedSubject);
+  const initialFailedBody = parseSafe(settings.failedEmailBody, DEFAULT_EMAIL_TEMPLATES.failedBody);
 
   // ✨ 2. Set React State
   const [successSubjectObj, setSuccessSubjectObj] = useState(initialSuccessSubject);

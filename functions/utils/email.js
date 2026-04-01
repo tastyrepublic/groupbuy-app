@@ -24,6 +24,25 @@ const EMAIL_LOCALE_DICT = {
   }
 };
 
+const DEFAULT_EMAIL_TEMPLATES = {
+  successSubject: { 
+    "EN": "Great news! Your Group Buy succeeded 🎉", 
+    "ZH-TW": "好消息！您的團購已成功 🎉" 
+  },
+  successBody: { 
+    "EN": "Your group buy reached its goal! Your payment will be captured shortly, and your order is currently being processed for shipping.", 
+    "ZH-TW": "您的團購已達標！我們即將為您進行扣款，訂單目前正在處理中，商品到貨後將為您出貨。" 
+  },
+  failedSubject: { 
+    "EN": "Update on your Group Buy", 
+    "ZH-TW": "關於您的團購更新" 
+  },
+  failedBody: { 
+    "EN": "Unfortunately, the group buy did not reach its goal this time. We have canceled your order and voided the payment authorization. No funds were captured.", 
+    "ZH-TW": "很遺憾，本次團購未達目標。我們已取消您的訂單，並取消了您的信用卡授權，不會向您收取任何費用。" 
+  }
+};
+
 async function dispatchGroupBuyEmail(participant, shop, campaign, type, blendedContext = null) {
   try {
     const settings = await prisma.settings.findUnique({ where: { shop } });
@@ -76,13 +95,21 @@ async function dispatchGroupBuyEmail(participant, shop, campaign, type, blendedC
     const realImgUrl = targetItem?.image?.url || (campaign ? campaign.productImage : "");
     const imgElement = realImgUrl ? `<img src="${realImgUrl}" alt="${realTitle}" style="width:100%; height:100%; object-fit:cover; border-radius:4px;" />` : `🎧`;
 
-    const parseSafe = (str, fallback) => { try { return JSON.parse(str); } catch { return fallback; } };
+    const parseSafe = (str, fallback) => { 
+      if (!str) return fallback; // Catch nulls!
+      try { return JSON.parse(str); } catch { return fallback; } 
+    };
     
     const rawSubject = type === "SUCCESS" ? settings.successEmailSubject : settings.failedEmailSubject;
     const rawBody = type === "SUCCESS" ? settings.successEmailBody : settings.failedEmailBody;
 
-    const subjectObj = parseSafe(rawSubject, { "EN": rawSubject });
-    const bodyObj = parseSafe(rawBody, { "EN": rawBody });
+    // ✨ NEW: Figure out which defaults to use
+    const defaultSubject = type === "SUCCESS" ? DEFAULT_EMAIL_TEMPLATES.successSubject : DEFAULT_EMAIL_TEMPLATES.failedSubject;
+    const defaultBody = type === "SUCCESS" ? DEFAULT_EMAIL_TEMPLATES.successBody : DEFAULT_EMAIL_TEMPLATES.failedBody;
+
+    // ✨ NEW: Safely parse, using our robust defaults if anything fails
+    const subjectObj = parseSafe(rawSubject, defaultSubject);
+    const bodyObj = parseSafe(rawBody, defaultBody);
 
     const finalSubject = subjectObj[locale] || subjectObj["EN"] || subjectObj[Object.keys(subjectObj)[0]];
     const finalBody = bodyObj[locale] || bodyObj["EN"] || bodyObj[Object.keys(bodyObj)[0]];

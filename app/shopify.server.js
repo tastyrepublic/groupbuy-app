@@ -6,6 +6,7 @@ import {
   BillingInterval, 
 } from "@shopify/shopify-app-remix/server";
 import { PrismaSessionStorage } from "@shopify/shopify-app-session-storage-prisma";
+import { DEFAULT_EMAIL_TEMPLATES } from "./utils/emailDictionary.js";
 import prisma from "./db.server";
 
 const shopify = shopifyApp({
@@ -52,7 +53,15 @@ const shopify = shopifyApp({
           await prisma.settings.upsert({
             where: { shop: session.shop },
             update: { contactEmail: contactEmail },
-            create: { shop: session.shop, contactEmail: contactEmail },
+            create: { 
+              shop: session.shop, 
+              contactEmail: contactEmail,
+              isOnboarded: false,
+              successEmailSubject: JSON.stringify(DEFAULT_EMAIL_TEMPLATES.successSubject),
+              successEmailBody: JSON.stringify(DEFAULT_EMAIL_TEMPLATES.successBody),
+              failedEmailSubject: JSON.stringify(DEFAULT_EMAIL_TEMPLATES.failedSubject),
+              failedEmailBody: JSON.stringify(DEFAULT_EMAIL_TEMPLATES.failedBody)
+            },
           });
           console.log(`[Install Sync] Captured contactEmail for new install: ${session.shop}`);
         }

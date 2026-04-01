@@ -7,6 +7,7 @@ import {
 import { ShieldCheckMarkIcon, AlertCircleIcon, CheckCircleIcon, InfoIcon } from '@shopify/polaris-icons';
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
+import { DEFAULT_EMAIL_TEMPLATES } from "../utils/emailDictionary.js";
 import { getI18n } from "../utils/i18n.server.js";
 
 export const loader = async ({ request }) => {
@@ -32,8 +33,16 @@ export const loader = async ({ request }) => {
   const liveContactEmail = data?.shop?.contactEmail;
 
   if (!settings) {
+    // ✨ Seed the database immediately using the Single Source of Truth
     settings = await db.settings.create({
-      data: { shop: session.shop, contactEmail: liveContactEmail }
+      data: { 
+        shop: session.shop, 
+        contactEmail: liveContactEmail,
+        successEmailSubject: JSON.stringify(DEFAULT_EMAIL_TEMPLATES.successSubject),
+        successEmailBody: JSON.stringify(DEFAULT_EMAIL_TEMPLATES.successBody),
+        failedEmailSubject: JSON.stringify(DEFAULT_EMAIL_TEMPLATES.failedSubject),
+        failedEmailBody: JSON.stringify(DEFAULT_EMAIL_TEMPLATES.failedBody)
+      }
     });
   }
 
