@@ -26,6 +26,7 @@ import {
   ButtonGroup,
   List,
   Tooltip,
+  Badge
 } from '@shopify/polaris';
 import { toDate, formatInTimeZone } from 'date-fns-tz';
 import { addMinutes } from 'date-fns';
@@ -35,6 +36,7 @@ import { DateTimePicker } from './DateTimePicker';
 
 export const CampaignForm = forwardRef(({
   initialData = {},
+  isStarted: isStartedProp = false,
   isFinished,
   hasParticipants,
   formErrors = {},
@@ -46,12 +48,14 @@ export const CampaignForm = forwardRef(({
   const hasUserInteracted = useRef(false);
   const isInitialMount = useRef(true);
 
+  const isStarted = isStartedProp;
+
   const [initialFormState, setInitialFormState] = useState(() => ({
     startDate: initialData.startDateTime || null,
     endDate: initialData.endDateTime || null,
     tiers: initialData.tiersJson ? JSON.parse(initialData.tiersJson) : [{ quantity: '5', discount: '10' }],
     leaderDiscount: initialData.leaderDiscount?.toString() || '0',
-    leaderMaxQty: initialData.leaderMaxQty?.toString() || '0', // ✨ NEW STATE
+    leaderMaxQty: initialData.leaderMaxQty?.toString() || '0', 
     startingParticipants: initialData.startingParticipants?.toString() || '0',
     timezone: initialData.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
   }));
@@ -61,27 +65,21 @@ export const CampaignForm = forwardRef(({
   const [timezone, setTimezone] = useState(initialFormState.timezone);
   const [tiers, setTiers] = useState(initialFormState.tiers);
   const [leaderDiscount, setLeaderDiscount] = useState(initialFormState.leaderDiscount);
-  const [leaderMaxQty, setLeaderMaxQty] = useState(initialFormState.leaderMaxQty); // ✨ NEW STATE
+  const [leaderMaxQty, setLeaderMaxQty] = useState(initialFormState.leaderMaxQty);
   const [startingParticipants, setStartingParticipants] = useState(initialFormState.startingParticipants);
   const [minStartDateTime, setMinStartDateTime] = useState(new Date());
   const [liveTime, setLiveTime] = useState(new Date());
 
   const [selectedProducts, setSelectedProducts] = useState(initialData.selectedProducts || []);
 
-  const [scope, setScope] = useState(
-    initialData.scope || 'PRODUCT'
-  );
-  const [countingMethod, setCountingMethod] = useState(
-    initialData.countingMethod || 'PARTICIPANT'
-  );
+  const [scope, setScope] = useState(initialData.scope || 'PRODUCT');
+  const [countingMethod, setCountingMethod] = useState(initialData.countingMethod || 'PARTICIPANT');
 
   const productFetcher = useFetcher();
   const [clientPickerError, setClientPickerError] = useState(null);
   const [timezoneInputValue, setTimezoneInputValue] = useState(initialFormState.timezone.replace(/_/g, ' '));
   const [filteredTimezoneOptions, setFilteredTimezoneOptions] = useState([]);
   const [tierErrors, setTierErrors] = useState([]);
-
-  const isStarted = startDate ? new Date(startDate) < liveTime : false;
 
   useEffect(() => {
     const timer = setInterval(() => setLiveTime(new Date()), 1000);
@@ -152,7 +150,7 @@ export const CampaignForm = forwardRef(({
       endDate !== initialFormState.endDate ||
       JSON.stringify(tiers) !== JSON.stringify(initialFormState.tiers) ||
       leaderDiscount !== initialFormState.leaderDiscount ||
-      leaderMaxQty !== initialFormState.leaderMaxQty || // ✨ ADDED TO DIRTY CHECK
+      leaderMaxQty !== initialFormState.leaderMaxQty || 
       startingParticipants !== initialFormState.startingParticipants ||
       timezone !== initialFormState.timezone ||
       JSON.stringify(selectedProducts) !== JSON.stringify(initialData.selectedProducts || []) ||
@@ -172,7 +170,7 @@ export const CampaignForm = forwardRef(({
       setEndDate(initialFormState.endDate);
       setTiers(initialFormState.tiers);
       setLeaderDiscount(initialFormState.leaderDiscount);
-      setLeaderMaxQty(initialFormState.leaderMaxQty); // ✨ RESET STATE
+      setLeaderMaxQty(initialFormState.leaderMaxQty); 
       setStartingParticipants(initialFormState.startingParticipants);
       setTimezone(initialFormState.timezone);
       setSelectedProducts(initialData.selectedProducts || []);
@@ -182,16 +180,38 @@ export const CampaignForm = forwardRef(({
     },
   }));
 
+  const minEndDateTime = useMemo(() => {
+    if (!startDate) return null;
+    const startD = toDate(startDate);
+    const baselineDate = (isStarted && startD < liveTime) ? liveTime : startD;
+    return baselineDate;
+  }, [startDate, liveTime, isStarted]);
+
+  const isEndDateInclusive = useMemo(() => {
+    if (!startDate || !endDate) return true;
+    const baselineDate = (isStarted && toDate(startDate) < liveTime) ? liveTime : toDate(startDate);
+    const baselineDateStr = formatInTimeZone(baselineDate, timezone, 'yyyy-MM-dd');
+    const endDateStr = formatInTimeZone(toDate(endDate), timezone, 'yyyy-MM-dd');
+    return baselineDateStr !== endDateStr;
+  }, [startDate, endDate, timezone, liveTime, isStarted]);
+
   useEffect(() => {
-    const newTierErrors = validateTiers(tiers);
+    const newTierErrors = validateTiers(tiers, translations?.sections?.tiers?.errors);
+    
     setTierErrors(newTierErrors);
+    
     const isProductSelected = selectedProducts.length > 0;
     const areTiersValid = newTierErrors.every(e => !e || Object.keys(e).length === 0);
-    const areDatesValid = startDate && endDate && new Date(startDate) < new Date(endDate);
+    
+    const endD = endDate ? toDate(endDate) : null;
+    const isEndValid = endD && minEndDateTime && endD > minEndDateTime;
+
+    const areDatesValid = startDate && isEndValid;
     const discountNum = parseInt(leaderDiscount, 10);
     const isDiscountValid = !isNaN(discountNum) && discountNum >= 0 && discountNum <= 100;
+    
     onValidityChange(isProductSelected && areTiersValid && areDatesValid && isDiscountValid);
-  }, [tiers, startDate, endDate, leaderDiscount, selectedProducts, onValidityChange]);
+  }, [tiers, startDate, endDate, minEndDateTime, leaderDiscount, selectedProducts, onValidityChange]);
 
   const allTimezoneOptions = useMemo(() => Intl.supportedValuesOf('timeZone').map((tz) => ({ value: tz, label: tz.replace(/_/g, ' ') })), []);
   useEffect(() => { setFilteredTimezoneOptions(allTimezoneOptions) }, [allTimezoneOptions]);
@@ -225,20 +245,10 @@ export const CampaignForm = forwardRef(({
     try {
       const selection = await window.shopify.resourcePicker({
         type: "product",
-        multiple: 1,
+        multiple: false,
       });
 
       if (selection) {
-        const firstProductId = selection[0].id;
-        const allFromSameProduct = selection.every(
-          (item) => item.id === firstProductId
-        );
-
-        if (!allFromSameProduct) {
-          setClientPickerError("Please select variants from only one product.");
-          return;
-        }
-
         setClientPickerError(null);
 
         const allSelectedVariants = selection.flatMap(product =>
@@ -248,7 +258,9 @@ export const CampaignForm = forwardRef(({
             title: product.title,
             variantTitle: variant.title,
             image: variant.image?.originalSrc || product.images[0]?.originalSrc || '',
-            handle: product.handle
+            handle: product.handle,
+            price: variant.price,
+            inventoryQuantity: variant.inventoryQuantity
           }))
         );
 
@@ -273,23 +285,6 @@ export const CampaignForm = forwardRef(({
       prevProducts.filter((product) => product.variantId !== variantIdToRemove)
     );
   };
-
-  const minEndDateTime = useMemo(() => {
-    if (!startDate) return null;
-    let minDate = toDate(startDate);
-    const [startHour, startMinute] = formatInTimeZone(minDate, timezone, 'HH:mm').split(':').map(Number);
-    if (startHour === 23 && startMinute === 10) {
-      minDate = addMinutes(minDate, 10);
-    }
-    return minDate;
-  }, [startDate, timezone]);
-
-  const isEndDateInclusive = useMemo(() => {
-    if (!startDate || !endDate) return true;
-    const startDateStr = formatInTimeZone(toDate(startDate), timezone, 'yyyy-MM-dd');
-    const endDateStr = formatInTimeZone(toDate(endDate), timezone, 'yyyy-MM-dd');
-    return startDateStr !== endDateStr;
-  }, [startDate, endDate, timezone]);
 
   const leaderDiscountSwitchRef = useRef(null);
   const startingParticipantsSwitchRef = useRef(null);
@@ -316,7 +311,6 @@ export const CampaignForm = forwardRef(({
     onValueChange(setLeaderDiscount)(numericValue.toString());
   };
 
-  // ✨ NEW: Handler for Max Qty input
   const handleLeaderMaxQtyChange = (value) => {
     const sanitized = value.replace(/[^\d]/g, '');
     onValueChange(setLeaderMaxQty)(sanitized === '' ? '0' : parseInt(sanitized, 10).toString());
@@ -366,6 +360,46 @@ export const CampaignForm = forwardRef(({
     translations?.notes?.editProductWarning || "The selected product and campaign type cannot be changed."
   ];
 
+  const pricePreview = useMemo(() => {
+    if (selectedProducts.length === 0) return null;
+    const prices = selectedProducts.map(p => parseFloat(p.price)).filter(p => !isNaN(p));
+    if (prices.length === 0) return null;
+    return { min: Math.min(...prices), max: Math.max(...prices) };
+  }, [selectedProducts]);
+
+  const getPricePreviewText = (discountStr) => {
+    if (!pricePreview || !discountStr) return null;
+    const discount = parseInt(discountStr, 10);
+    if (isNaN(discount) || discount < 0 || discount > 100) return null;
+    
+    const multiplier = 1 - (discount / 100);
+    const minD = (pricePreview.min * multiplier).toFixed(2);
+    const maxD = (pricePreview.max * multiplier).toFixed(2);
+    
+    const prefix = translations?.notes?.finalPrice || "Final price:";
+    
+    if (minD === maxD) return `${prefix} $${minD}`;
+    return `${prefix} $${minD} - $${maxD}`;
+  };
+
+  const renderLiveTime = () => {
+    const dStr = formatInTimeZone(liveTime, timezone, 'd');
+    const yStr = formatInTimeZone(liveTime, timezone, 'yyyy');
+    const timeStr = formatInTimeZone(liveTime, timezone, 'HH:mm:ss');
+    
+    const mIndex = parseInt(formatInTimeZone(liveTime, timezone, 'M'), 10) - 1;
+    const defaultShortMonth = formatInTimeZone(liveTime, timezone, 'MMM');
+    const mName = translations?.dateTimePicker?.monthsShort?.[mIndex] || defaultShortMonth;
+
+    const formatString = translations?.notes?.liveTimeFormat || "{{month}} {{day}}, {{year}}, {{time}}";
+    
+    return formatString
+      .replace('{{year}}', yStr)
+      .replace('{{month}}', mName)
+      .replace('{{day}}', dStr)
+      .replace('{{time}}', timeStr);
+  };
+
   return (
     <Form method="post" id="campaign-form" ref={formRef} replace>
       <BlockStack gap="500">
@@ -397,7 +431,7 @@ export const CampaignForm = forwardRef(({
                     resourceName={{ singular: 'variant', plural: 'variants' }}
                     items={selectedProducts}
                     renderItem={(item) => {
-                      const { variantId, title, variantTitle, image } = item;
+                      const { variantId, title, variantTitle, image, price, inventoryQuantity } = item;
                       const media = (
                         <Thumbnail
                           source={image || ImageIcon}
@@ -405,36 +439,87 @@ export const CampaignForm = forwardRef(({
                           size="small"
                         />
                       );
-                      const shortcutActions = !!initialData.id ? [] : [
-                        {
-                          content: <Icon source={DeleteIcon} tone="critical" />,
-                          variant: 'plain',
-                          accessibilityLabel: `Remove ${variantTitle}`,
-                          onAction: () => handleRemoveVariant(variantId),
-                        },
-                      ];
+                      
                       return (
                         <ResourceItem
                           id={variantId}
                           media={media}
                           accessibilityLabel={`View details for ${title}`}
-                          shortcutActions={shortcutActions}
-                          persistActions
+                          name={title}
                         >
-                          <Text variant="bodyMd" fontWeight="semibold" as="h3">
-                            {title}
-                          </Text>
-                          <div>{variantTitle}</div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', gap: '16px' }}>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <Text variant="bodyMd" fontWeight="semibold" as="h3" truncate>
+                                {title}
+                              </Text>
+                              
+                              <div style={{ 
+                                display: 'grid', 
+                                gridTemplateColumns: '1fr 80px 110px', 
+                                gap: '12px', 
+                                marginTop: '4px', 
+                                alignItems: 'center' 
+                              }}>
+                                <div style={{ minWidth: 0 }}>
+                                  <Text tone="subdued" truncate>{variantTitle !== 'Default Title' ? variantTitle : ''}</Text>
+                                </div>
+                                
+                                <div style={{ textAlign: 'right' }}>
+                                  {price !== undefined && (
+                                    <Text>${parseFloat(price).toFixed(2)}</Text>
+                                  )}
+                                </div>
+
+                                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                                  {inventoryQuantity !== undefined && (
+                                    <Badge tone={inventoryQuantity > 0 ? "success" : "critical"}>
+                                      {inventoryQuantity} {inventoryQuantity > 0 
+                                        ? (translations?.notes?.inStock || "in stock") 
+                                        : (translations?.notes?.outOfStock || "out of stock")}
+                                    </Badge>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* ✨ POLISH: Only render this container in "Create" mode so the layout stretches dynamically in "Edit" mode */}
+                            {!initialData.id && (
+                              <div style={{ flexShrink: 0, width: '32px', display: 'flex', justifyContent: 'flex-end' }}>
+                                <Button 
+                                  variant="tertiary" 
+                                  icon={DeleteIcon} 
+                                  onClick={() => handleRemoveVariant(variantId)} 
+                                  accessibilityLabel={`Remove ${variantTitle}`}
+                                />
+                              </div>
+                            )}
+                          </div>
                         </ResourceItem>
                       );
                     }}
                   />
                 )}
+                
                 {selectedProducts.length > 0 && (
-                  <Button variant="plain" tone="critical" onClick={() => onValueChange(setSelectedProducts)([])} disabled={!!initialData.id}>
-                    {translations?.notes?.removeAll || "Remove all"}
-                  </Button>
+                  <BlockStack inlineAlign="center">
+                    <ButtonGroup>
+                      <Button 
+                        tone="critical" 
+                        onClick={() => onValueChange(setSelectedProducts)([])} 
+                        disabled={!!initialData.id}
+                      >
+                        {translations?.notes?.removeAll || "Remove all"}
+                      </Button>
+                      <Button 
+                        target="_blank" 
+                        url={`shopify:admin/products/${selectedProducts[0].id.split('/').pop()}`}
+                      >
+                        {translations?.notes?.editInShopify || "Edit Product in Shopify"}
+                      </Button>
+                    </ButtonGroup>
+                  </BlockStack>
                 )}
+
                 {!selectedProducts.length && productFetcher.state !== 'loading' && (
                   <BlockStack gap="200">
                     <Button onClick={handleProductSelection} disabled={!!initialData.id}>
@@ -529,6 +614,7 @@ export const CampaignForm = forwardRef(({
                           disabled={isStarted || hasParticipants} 
                           error={tierErrors[index]?.discount} 
                           autoComplete="off" 
+                          helpText={getPricePreviewText(tier.discount)}
                         />
                         <div style={{ marginTop: '10px' }}>
                           <Button 
@@ -557,18 +643,28 @@ export const CampaignForm = forwardRef(({
                 />
                 <Text as="p" tone="subdued" alignment="center">
                   {translations?.notes?.currentTime || "Current time in"} {timezone.replace(/_/g, ' ')} {translations?.notes?.is || "is"}{' '}
-                  <strong>{formatInTimeZone(liveTime, timezone, 'MMM d, yyyy, HH:mm:ss')}</strong>.
+                  <strong>{renderLiveTime()}</strong>.
                 </Text>
-                <DateTimePicker
-                  label={translations?.sections?.schedule?.startDate || "Start Date"}
-                  timezone={timezone}
-                  selectedDateTime={startDate}
-                  onDateTimeChange={onValueChange(setStartDate)}
-                  minDateTime={minStartDateTime}
-                  inclusive={true}
-                  disabled={isStarted}
-                  error={formErrors?.schedule?.startDate}
-                />
+                
+                <BlockStack gap="100">
+                  <DateTimePicker
+                    label={translations?.sections?.schedule?.startDate || "Start Date"}
+                    timezone={timezone}
+                    selectedDateTime={startDate}
+                    onDateTimeChange={onValueChange(setStartDate)}
+                    minDateTime={minStartDateTime}
+                    inclusive={true}
+                    disabled={isStarted}
+                    error={formErrors?.schedule?.startDate}
+                    translations={translations?.dateTimePicker}
+                  />
+                  {(!isStarted && startDate && toDate(startDate) < new Date(liveTime.getTime() - 60000)) && (
+                    <Text as="p" tone="magic" variant="bodySm">
+                      {translations?.notes?.autoStartWarning || "Time has passed. Campaign will start instantly upon saving."}
+                    </Text>
+                  )}
+                </BlockStack>
+
                 <DateTimePicker
                   label={translations?.sections?.schedule?.endDate || "End Date"}
                   timezone={timezone}
@@ -577,7 +673,10 @@ export const CampaignForm = forwardRef(({
                   minDateTime={minEndDateTime}
                   inclusive={isEndDateInclusive}
                   disabled={isFinished}
-                  error={formErrors?.schedule?.endDate}
+                  error={(endDate && minEndDateTime && toDate(endDate) <= minEndDateTime) 
+                    ? (translations?.notes?.invalidEndDate || "End time must be in the future.") 
+                    : formErrors?.schedule?.endDate}
+                  translations={translations?.dateTimePicker}
                 />
               </BlockStack>
             </Card>
@@ -588,7 +687,6 @@ export const CampaignForm = forwardRef(({
                   {translations?.sections?.features?.note || "Note: Leader Discount and Fake Count cannot be used simultaneously. Enabling one will automatically turn off the other."}
                 </Text>
                 
-                {/* ✨ LEADER DISCOUNT FIELDS */}
                 <s-switch
                   ref={leaderDiscountSwitchRef}
                   label={translations?.sections?.features?.leaderLabel || "Leader discount (%)"}
@@ -602,6 +700,7 @@ export const CampaignForm = forwardRef(({
                   disabled={!leaderDiscountEnabled || isStarted || hasParticipants}
                   error={formErrors?.leaderDiscount}
                   autoComplete="off"
+                  helpText={leaderDiscountEnabled ? getPricePreviewText(leaderDiscount) : null}
                 />
                 <TextField
                   label={translations?.sections?.features?.leaderMaxQtyLabel || "Maximum Leader Discount Quantity"}
@@ -659,7 +758,6 @@ export const CampaignForm = forwardRef(({
         name="leaderDiscount" 
         value={leaderDiscountEnabled ? (leaderDiscount || '0') : '0'} 
       />
-      {/* ✨ HIDDEN FIELD FOR MAX QTY */}
       <input 
         type="hidden" 
         name="leaderMaxQty" 

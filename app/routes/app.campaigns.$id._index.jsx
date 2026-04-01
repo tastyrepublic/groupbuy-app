@@ -9,94 +9,60 @@ import { CampaignForm } from '../components/CampaignForm';
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { validateTiers } from "../components/validation";
-
-// ✨ 1. Import i18n utility
 import { getI18n } from "../utils/i18n.server.js";
 
 export const loader = async ({ request, params }) => {
-  const { admin } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   const campaignId = parseInt(params.id, 10);
-  
-  // ✨ 2. Fetch translations
   const { t } = await getI18n(request);
 
   const campaign = await db.campaign.findUnique({ where: { id: campaignId } });
-  if (!campaign) { throw new Response("Campaign Not Found", { status: 404 }); }
+  if (!campaign || campaign.shop !== session.shop) throw new Response("Campaign Not Found", { status: 404 }); 
 
   let selectedProducts = [];
   
   if (campaign.selectedVariantIdsJson) {
     const variantIds = JSON.parse(campaign.selectedVariantIdsJson);
-
     if (variantIds.length > 0) {
+      // ✨ FIX: Updated GraphQL query to fetch 'price' and 'inventoryQuantity'
       const response = await admin.graphql(
         `#graphql
-          query getVariantDetails($ids: [ID!]!) {
-            nodes(ids: $ids) {
-              ... on ProductVariant {
-                id
-                title
-                media(first: 1) {
-                  edges {
-                    node {
-                      ... on MediaImage {
-                        image {
-                          url
-                        }
-                      }
-                    }
-                  }
-                }
-                product {
-                  id
-                  title
-                  handle
-                  media(first: 1) {
-                    edges {
-                      node {
-                        ... on MediaImage {
-                          image {
-                            url
-                          }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
+          query getVariantDetails($ids: [ID!]!) { 
+            nodes(ids: $ids) { 
+              ... on ProductVariant { 
+                id 
+                title 
+                price 
+                inventoryQuantity
+                media(first: 1) { edges { node { ... on MediaImage { image { url } } } } } 
+                product { id title handle media(first: 1) { edges { node { ... on MediaImage { image { url } } } } } } 
+              } 
+            } 
           }`,
         { variables: { ids: variantIds } },
       );
-
       const { data } = await response.json();
-
-      selectedProducts = data.nodes.filter(Boolean).map(variant => {
-        const variantImageUrl = variant.media?.edges[0]?.node.image?.url;
-        const productImageUrl = variant.product.media?.edges[0]?.node.image?.url;
-
-        return {
-          id: variant.product.id,
-          variantId: variant.id,
-          title: variant.product.title,
-          variantTitle: variant.title,
-          image: variantImageUrl || productImageUrl || '',
-          handle: variant.product.handle,
-        };
-      });
+      
+      selectedProducts = data.nodes.filter(Boolean).map(variant => ({
+        id: variant.product.id,
+        variantId: variant.id,
+        title: variant.product.title,
+        variantTitle: variant.title,
+        image: variant.media?.edges[0]?.node.image?.url || variant.product.media?.edges[0]?.node.image?.url || '',
+        handle: variant.product.handle,
+        // ✨ FIX: Map the newly fetched fields to state!
+        price: variant.price,
+        inventoryQuantity: variant.inventoryQuantity
+      }));
     }
   }
 
-  const initialData = {
-    ...campaign,
-    selectedProducts: selectedProducts,
-  };
-
+  const initialData = { ...campaign, selectedProducts: selectedProducts };
   const url = new URL(request.url);
   const version = url.searchParams.get("v");
-  const participantCount = 0;
+  
+  const participantCount = await db.participant.count({ where: { group: { campaignId: campaignId }, status: "ACTIVE" } });
 
-  // ✨ 3. Package the translations for the Edit page
   const translations = {
     title: t("EditCampaign.title", "Edit campaign"),
     campaignsLabel: t("Dashboard.title", "Group Buy Campaigns"),
@@ -104,7 +70,7 @@ export const loader = async ({ request, params }) => {
     discard: t("CreateCampaign.back", "Discard"),
     toastError: t("EditCampaign.messages.error", "Please review the errors on the form"),
     toastSuccess: t("EditCampaign.messages.saved", "Campaign saved successfully"),
-    form: t("CreateCampaign", { returnObjects: true }) // Reuse the massive form dictionary!
+    form: t("CreateCampaign", { returnObjects: true }) 
   };
 
   return json({ campaign: initialData, participantCount, version, translations });
@@ -114,15 +80,16 @@ export const action = async ({ request, params }) => {
   const { session, admin } = await authenticate.admin(request);
   const formData = await request.formData();
   const campaignId = parseInt(params.id, 10);
+  
+  const { t } = await getI18n(request);
 
   const campaign = await db.campaign.findUnique({ where: { id: campaignId } });
-  if (!campaign) { throw new Response("Not Found", { status: 404 }); }
+  if (!campaign || campaign.shop !== session.shop) throw new Response("Not Found", { status: 404 }); 
 
-  const participantCount = 0; 
+  const participantCount = await db.participant.count({ where: { group: { campaignId: campaignId }, status: "ACTIVE" } }); 
   const isStarted = new Date(campaign.startDateTime) < new Date();
   const hasParticipants = participantCount > 0;
   const errors = { tiers: [], schedule: {}, leaderDiscount: null };
-
   const dataToUpdate = {};
 
   const selectedVariantIdsJson = formData.get("selectedVariantIdsJson");
@@ -135,20 +102,27 @@ export const action = async ({ request, params }) => {
       dataToUpdate.productImage = formData.get("productImage");
       dataToUpdate.productHandle = formData.get("productHandle");
     } else {
-      errors.product = "You must select at least one product variant.";
+      errors.product = t("CreateCampaign.notes.selectVariant", "You must select at least one product variant.");
     }
   }
 
   if (!hasParticipants) {
     const leaderDiscount = parseInt(formData.get("leaderDiscount"), 10);
-    if (isNaN(leaderDiscount) || leaderDiscount < 0 || leaderDiscount > 100) { errors.leaderDiscount = 'Must be 0-100.'; }
+    if (isNaN(leaderDiscount) || leaderDiscount < 0 || leaderDiscount > 100) { errors.leaderDiscount = t("CreateCampaign.notes.invalidLeaderDiscount", "Must be 0-100."); }
     
-    // ✨ Parse and save the new limit
-    const leaderMaxQty = parseInt(formData.get("leaderMaxQty"), 10);
-    dataToUpdate.leaderMaxQty = isNaN(leaderMaxQty) ? 0 : leaderMaxQty;
+    const rawMaxQty = parseInt(formData.get("leaderMaxQty"), 10);
+    dataToUpdate.leaderMaxQty = isNaN(rawMaxQty) || rawMaxQty < 0 ? 0 : rawMaxQty;
     
     const tiers = JSON.parse(formData.get("tiers"));
-    const tierErrors = validateTiers(tiers);
+    
+    const tierErrors = validateTiers(tiers, {
+      minQty: t("CreateCampaign.sections.tiers.errors.minQty", "Must be > 0."),
+      minDiscount: t("CreateCampaign.sections.tiers.errors.minDiscount", "Must be > 0."),
+      maxDiscount: t("CreateCampaign.sections.tiers.errors.maxDiscount", "Max 100."),
+      greaterThanQty: t("CreateCampaign.sections.tiers.errors.greaterThanQty", "Must be >"),
+      greaterThanDiscount: t("CreateCampaign.sections.tiers.errors.greaterThanDiscount", "Must be >")
+    });
+    
     if (tierErrors.some(e => e)) { errors.tiers = tierErrors; }
 
     dataToUpdate.tiersJson = JSON.stringify(tiers);
@@ -161,18 +135,23 @@ export const action = async ({ request, params }) => {
     const campaignTimezone = formData.get("timezone");
     const startDateTimeUtc = toDate(formData.get("startDate"), { timeZone: campaignTimezone });
     if (startDateTimeUtc.getTime() < new Date().getTime() - 60000) { 
-      errors.schedule.startDate = 'Cannot be in the past.'; 
+      errors.schedule.startDate = t("CreateCampaign.notes.pastStartDate", "Cannot be in the past."); 
     }
     dataToUpdate.startDateTime = startDateTimeUtc;
-    dataToUpdate.startingParticipants = parseInt(formData.get("startingParticipants"), 10);
+    
+    const rawStarting = parseInt(formData.get("startingParticipants"), 10);
+    dataToUpdate.startingParticipants = isNaN(rawStarting) || rawStarting < 0 ? 0 : rawStarting;
   }
 
   const campaignTimezone = formData.get("timezone");
   const endDateTimeUtc = toDate(formData.get("endDate"), { timeZone: campaignTimezone });
   const currentStart = dataToUpdate.startDateTime || campaign.startDateTime;
+  const nowUtc = new Date();
 
   if (currentStart >= endDateTimeUtc) { 
-    errors.schedule.endDate = 'Must be after start date.'; 
+    errors.schedule.endDate = t("CreateCampaign.notes.invalidEndDate", "Must be after start date."); 
+  } else if (endDateTimeUtc <= nowUtc) {
+    errors.schedule.endDate = t("CreateCampaign.notes.invalidEndDate", "End time must be in the future.");
   } else {
     dataToUpdate.endDateTime = endDateTimeUtc;
     dataToUpdate.timezone = campaignTimezone;
@@ -185,28 +164,12 @@ export const action = async ({ request, params }) => {
   try {
     if (dataToUpdate.selectedVariantIdsJson || dataToUpdate.endDateTime) {
       if (campaign.sellingPlanGroupId) {
-        await admin.graphql(`
-          mutation { sellingPlanGroupDelete(id: "${campaign.sellingPlanGroupId}") { deletedSellingPlanGroupId } }
-        `);
+        await admin.graphql(`mutation { sellingPlanGroupDelete(id: "${campaign.sellingPlanGroupId}") { deletedSellingPlanGroupId } }`);
       }
 
       const newEndDateUtc = dataToUpdate.endDateTime || campaign.endDateTime;
-      const newVariants = dataToUpdate.selectedVariantIdsJson 
-        ? JSON.parse(dataToUpdate.selectedVariantIdsJson) 
-        : JSON.parse(campaign.selectedVariantIdsJson);
+      const newVariants = dataToUpdate.selectedVariantIdsJson ? JSON.parse(dataToUpdate.selectedVariantIdsJson) : JSON.parse(campaign.selectedVariantIdsJson);
       const productId = dataToUpdate.productId || campaign.productId;
-
-      const spMutation = `
-        mutation sellingPlanGroupCreate($input: SellingPlanGroupInput!, $resources: SellingPlanGroupResourceInput) {
-          sellingPlanGroupCreate(input: $input, resources: $resources) {
-            sellingPlanGroup {
-              id
-              sellingPlans(first: 1) { edges { node { id } } }
-            }
-            userErrors { field message }
-          }
-        }
-      `;
 
       const spInput = {
         name: "Group Buy Special Offer",
@@ -223,10 +186,11 @@ export const action = async ({ request, params }) => {
           pricingPolicies: [{ fixed: { adjustmentType: "PERCENTAGE", adjustmentValue: { percentage: 0 } } }]
         }]
       };
-      
-      const spResources = { productIds: [productId], productVariantIds: newVariants };
 
-      const spResponse = await admin.graphql(spMutation, { variables: { input: spInput, resources: spResources } });
+      const spResponse = await admin.graphql(
+        `mutation sellingPlanGroupCreate($input: SellingPlanGroupInput!, $resources: SellingPlanGroupResourceInput) { sellingPlanGroupCreate(input: $input, resources: $resources) { sellingPlanGroup { id sellingPlans(first: 1) { edges { node { id } } } } userErrors { field message } } }`, 
+        { variables: { input: spInput, resources: { productIds: [productId], productVariantIds: newVariants } } }
+      );
       const spData = await spResponse.json();
       
       if (spData.data?.sellingPlanGroupCreate?.sellingPlanGroup) {
@@ -235,10 +199,7 @@ export const action = async ({ request, params }) => {
       }
     }
 
-    // Update the database
-    if (Object.keys(dataToUpdate).length > 0) {
-      await db.campaign.update({ where: { id: campaignId, shop: session.shop }, data: dataToUpdate });
-    }
+    if (Object.keys(dataToUpdate).length > 0) await db.campaign.update({ where: { id: campaignId, shop: session.shop }, data: dataToUpdate });
 
     return redirect(`/app/campaigns/${campaignId}?success=true&v=${Date.now()}`);
 
@@ -249,7 +210,7 @@ export const action = async ({ request, params }) => {
 };
 
 export default function EditCampaignPage() {
-  const { campaign, participantCount, version, translations } = useLoaderData(); // ✨ Read translations
+  const { campaign, participantCount, version, translations } = useLoaderData(); 
   const submit = useSubmit();
   const navigation = useNavigation();
   const actionData = useActionData();
@@ -263,46 +224,25 @@ export default function EditCampaignPage() {
   const isBusy = navigation.state === 'submitting' || navigation.state === 'loading';
   const isSuccessRedirect = new URLSearchParams(location.search).has("success");
 
-  useEffect(() => {
-    if (isDirty && !isSuccessRedirect) {
-      app.saveBar.show('edit-campaign-save-bar');
-    } else {
-      app.saveBar.hide('edit-campaign-save-bar');
-    }
-  }, [isDirty, isSuccessRedirect, app]);
+  useEffect(() => { isDirty && !isSuccessRedirect ? app.saveBar.show('edit-campaign-save-bar') : app.saveBar.hide('edit-campaign-save-bar'); }, [isDirty, isSuccessRedirect, app]);
 
-  const blocker = useBlocker(
-    ({ currentLocation, nextLocation }) =>
-      isDirty && currentLocation.pathname !== nextLocation.pathname
-  );
+  const blocker = useBlocker(({ currentLocation, nextLocation }) => isDirty && currentLocation.pathname !== nextLocation.pathname);
 
   const isStarted = new Date(campaign.startDateTime) < new Date();
   const hasParticipants = participantCount > 0; 
   const isFinished = campaign.status === 'SUCCESSFUL' || campaign.status === 'FAILED';
   const formKey = version || campaign.id;
 
-  const handleDirtyChange = useCallback((dirty) => {
-    setIsDirty(dirty);
-  }, []);
-
-  const handleValidityChange = useCallback((isValid) => {
-    setIsFormValid(isValid);
-  }, []);
-  
-  const handleSave = () => {
-    campaignFormRef.current?.submit(); 
-  };
-
-  const handleDiscard = () => { 
-    campaignFormRef.current?.discard(); 
-  };
+  const handleDirtyChange = useCallback((dirty) => { setIsDirty(dirty); }, []);
+  const handleValidityChange = useCallback((isValid) => { setIsFormValid(isValid); }, []);
+  const handleSave = () => { campaignFormRef.current?.submit(); };
+  const handleDiscard = () => { campaignFormRef.current?.discard(); };
+  const handleBackAction = () => { navigate('/app'); };
   
   useEffect(() => {
     if (navigation.state === 'idle' && actionData?.errors) {
-      // ✨ Translate toast error
       app.toast.show(translations.toastError, { isError: true, duration: 3000 });
     } else if (navigation.state === 'idle' && isSuccessRedirect) {
-      // ✨ Translate toast success
       app.toast.show(translations.toastSuccess);
       navigate(location.pathname, { replace: true });
     }
@@ -310,48 +250,21 @@ export default function EditCampaignPage() {
 
   useEffect(() => {
     if (blocker.state === "blocked") {
-      app.saveBar.leaveConfirmation()
-        .then((confirmed) => confirmed ? blocker.proceed() : blocker.reset());
+      app.saveBar.leaveConfirmation().then((confirmed) => confirmed ? blocker.proceed() : blocker.reset());
     }
   }, [blocker, app]);
-
-  const handleBackAction = () => {
-    navigate('/app');
-  };
   
   return (
-    <Page
-      title={translations.title}
-      backAction={{ content: translations.campaignsLabel, onAction: handleBackAction }}
-    >
+    <Page title={translations.title} backAction={{ content: translations.campaignsLabel, onAction: handleBackAction }}>
       <SaveBar id="edit-campaign-save-bar">
-        <button 
-          variant="primary" 
-          onClick={handleSave}
-          loading={isBusy ? "" : undefined}
-          disabled={!isFormValid || isBusy}
-        >
+        <button variant="primary" onClick={handleSave} loading={isBusy ? "" : undefined} disabled={!isFormValid || isBusy}>
           {translations.save}
         </button>
-        <button onClick={handleDiscard}>
-          {translations.discard}
-        </button>
+        <button onClick={handleDiscard}>{translations.discard}</button>
       </SaveBar>
-
       <Layout>
         <Layout.Section>
-          <CampaignForm
-            key={formKey}
-            ref={campaignFormRef}
-            onDirtyChange={handleDirtyChange}
-            onValidityChange={handleValidityChange}
-            initialData={campaign}
-            isStarted={isStarted}
-            isFinished={isFinished}
-            hasParticipants={hasParticipants}
-            formErrors={actionData?.errors}
-            translations={translations.form} // ✨ Pass the massive dictionary form!
-          />
+          <CampaignForm key={formKey} ref={campaignFormRef} onDirtyChange={handleDirtyChange} onValidityChange={handleValidityChange} initialData={campaign} isStarted={isStarted} isFinished={isFinished} hasParticipants={hasParticipants} formErrors={actionData?.errors} translations={translations.form} />
         </Layout.Section>
       </Layout>
     </Page>

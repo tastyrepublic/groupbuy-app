@@ -69,8 +69,9 @@ export const loader = async ({ request }) => {
     
     let finalProgress = campaign.startingParticipants; 
 
-    // Only hit Firebase if the campaign is actively running
-    if (campaignStatus === "ACTIVE") {
+    // ✨ FIX: Fetch Firebase data for BOTH Active and Ended campaigns!
+    // We only skip SCHEDULED campaigns because they haven't started accumulating real orders yet.
+    if (campaignStatus === "ACTIVE" || campaignStatus === "ENDED") {
       let docId = `campaign_${campaign.id}`;
       if (campaign.scope === 'VARIANT') {
          docId = `campaign_${campaign.id}_variant_${simpleVariantId}`;

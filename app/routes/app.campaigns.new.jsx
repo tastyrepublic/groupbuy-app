@@ -9,18 +9,12 @@ import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { validateTiers } from "../components/validation";
 import { toggleContinueSelling } from "../utils/inventory.server.js";
-
 import { requireSetup } from "../utils/guard.server.js";
-
 import { getI18n } from "../utils/i18n.server.js";
 
-// ✨ 1. Update the loader to grab the whole dictionary object
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
-
-  // ✨ Deploy the Guard!
   await requireSetup(session, request);
-
   const { t } = await getI18n(request);
 
   return json({
@@ -34,32 +28,43 @@ export const loader = async ({ request }) => {
   });
 };
 
-// --- ACTION (No changes needed) ---
 export const action = async ({ request }) => {
   const { session, admin } = await authenticate.admin(request);
   const formData = await request.formData();
+  
+  // ✨ Fetch translations for the server-side rejections
+  const { t } = await getI18n(request);
   
   const errors = { tiers: [], schedule: {}, product: null, leaderDiscount: null, form: null };
 
   const productId = formData.get("productId");
   if (!productId) {
-    errors.product = "You must select a product.";
+    errors.product = t("CreateCampaign.notes.selectProduct", "You must select a product.");
   }
 
   const selectedVariantIdsJson = formData.get("selectedVariantIdsJson");
   const selectedVariantIds = selectedVariantIdsJson ? JSON.parse(selectedVariantIdsJson) : [];
 
   if (selectedVariantIds.length === 0) {
-      errors.product = "You must select at least one product variant.";
+      errors.product = t("CreateCampaign.notes.selectVariant", "You must select at least one product variant.");
   }
   
   const leaderDiscount = parseInt(formData.get("leaderDiscount"), 10);
   if (isNaN(leaderDiscount) || leaderDiscount < 0 || leaderDiscount > 100) {
-    errors.leaderDiscount = 'Must be 0-100.';
+    errors.leaderDiscount = t("CreateCampaign.notes.invalidLeaderDiscount", "Must be 0-100.");
   }
 
   const tiers = JSON.parse(formData.get("tiers"));
-  const tierErrors = validateTiers(tiers);
+  
+  // ✨ Translate the Tier Validation Errors
+  const tierErrors = validateTiers(tiers, {
+    minQty: t("CreateCampaign.sections.tiers.errors.minQty", "Must be > 0."),
+    minDiscount: t("CreateCampaign.sections.tiers.errors.minDiscount", "Must be > 0."),
+    maxDiscount: t("CreateCampaign.sections.tiers.errors.maxDiscount", "Max 100."),
+    greaterThanQty: t("CreateCampaign.sections.tiers.errors.greaterThanQty", "Must be >"),
+    greaterThanDiscount: t("CreateCampaign.sections.tiers.errors.greaterThanDiscount", "Must be >")
+  });
+  
   if (tierErrors.some(e => e)) {
     errors.tiers = tierErrors;
   }
@@ -67,15 +72,24 @@ export const action = async ({ request }) => {
   const campaignTimezone = formData.get("timezone");
   const startDateTimeLocal = formData.get("startDate");
   const endDateTimeLocal = formData.get("endDate");
-  const startDateTimeUtc = toDate(startDateTimeLocal, { timeZone: campaignTimezone });
+  
+  let startDateTimeUtc = toDate(startDateTimeLocal, { timeZone: campaignTimezone });
   const endDateTimeUtc = toDate(endDateTimeLocal, { timeZone: campaignTimezone });
   
   const nowUtc = new Date();
-  if (startDateTimeUtc.getTime() < nowUtc.getTime() - 60000) {
-    errors.schedule.startDate = 'Cannot be in the past.';
+
+  // The Auto-Start Correction
+  if (startDateTimeUtc.getTime() < nowUtc.getTime()) {
+    startDateTimeUtc = nowUtc;
   }
+
+  // ✨ Translate Date Validation Errors
   if (startDateTimeUtc >= endDateTimeUtc) {
-    errors.schedule.endDate = 'Must be after start date.';
+    errors.schedule.endDate = t("CreateCampaign.notes.invalidEndDate", "Must be after start date.");
+  }
+
+  if (endDateTimeUtc <= nowUtc) {
+    errors.schedule.endDate = t("CreateCampaign.notes.invalidEndDate", "End time must be in the future.");
   }
 
   if (errors.product || errors.leaderDiscount || errors.tiers.some(e => e) || Object.keys(errors.schedule).length > 0) {
@@ -86,20 +100,8 @@ export const action = async ({ request }) => {
     const sellingPlanMutation = `
       mutation sellingPlanGroupCreate($input: SellingPlanGroupInput!, $resources: SellingPlanGroupResourceInput) {
         sellingPlanGroupCreate(input: $input, resources: $resources) {
-          sellingPlanGroup {
-            id
-            sellingPlans(first: 1) {
-              edges {
-                node {
-                  id
-                }
-              }
-            }
-          }
-          userErrors {
-            field
-            message
-          }
+          sellingPlanGroup { id sellingPlans(first: 1) { edges { node { id } } } }
+          userErrors { field message }
         }
       }
     `;
@@ -109,59 +111,31 @@ export const action = async ({ request }) => {
       merchantCode: `GB-${Date.now()}`,
       options: ["Discount Tier"], 
       position: 1,
-      sellingPlansToCreate: [
-        {
-          name: "Join Group Buy (Pay $0 Today)", 
-          options: ["Join Group Buy"],
-          position: 1,
-          category: "PRE_ORDER", 
-          billingPolicy: {
-            fixed: { 
-              checkoutCharge: { type: "PERCENTAGE", value: { percentage: 0 } },
-              remainingBalanceChargeTrigger: "EXACT_TIME",
-              remainingBalanceChargeExactTime: endDateTimeUtc.toISOString()
-            } 
-          },
-          deliveryPolicy: {
-            fixed: { 
-              fulfillmentTrigger: "EXACT_TIME",
-              fulfillmentExactTime: endDateTimeUtc.toISOString() 
-            } 
-          },
-          pricingPolicies: [
-            {
-              fixed: { adjustmentType: "PERCENTAGE", adjustmentValue: { percentage: 0 } } 
-            }
-          ]
-        }
-      ]
+      sellingPlansToCreate: [{
+        name: "Join Group Buy (Pay $0 Today)", 
+        options: ["Join Group Buy"],
+        position: 1,
+        category: "PRE_ORDER", 
+        billingPolicy: { fixed: { checkoutCharge: { type: "PERCENTAGE", value: { percentage: 0 } }, remainingBalanceChargeTrigger: "EXACT_TIME", remainingBalanceChargeExactTime: endDateTimeUtc.toISOString() } },
+        deliveryPolicy: { fixed: { fulfillmentTrigger: "EXACT_TIME", fulfillmentExactTime: endDateTimeUtc.toISOString() } },
+        pricingPolicies: [{ fixed: { adjustmentType: "PERCENTAGE", adjustmentValue: { percentage: 0 } } }]
+      }]
     };
 
-    const sellingPlanResources = {
-      productIds: [productId],
-      productVariantIds: selectedVariantIds
-    };
-
-    const spResponse = await admin.graphql(sellingPlanMutation, { 
-      variables: { 
-        input: sellingPlanInput,
-        resources: sellingPlanResources
-      } 
-    });
-    
+    const spResponse = await admin.graphql(sellingPlanMutation, { variables: { input: sellingPlanInput, resources: { productIds: [productId], productVariantIds: selectedVariantIds } } });
     const spData = await spResponse.json();
     
-    if (spData.data?.sellingPlanGroupCreate?.userErrors?.length > 0) {
-      console.error("Selling Plan Errors:", spData.data.sellingPlanGroupCreate.userErrors);
-      throw new Error("Failed to create Shopify Selling Plan");
-    }
+    if (spData.data?.sellingPlanGroupCreate?.userErrors?.length > 0) throw new Error("Failed to create Shopify Selling Plan");
 
     const generatedSellingPlanGroupId = spData.data.sellingPlanGroupCreate.sellingPlanGroup.id;
     const generatedSellingPlanId = spData.data.sellingPlanGroupCreate.sellingPlanGroup.sellingPlans.edges[0].node.id;
 
-    const leaderMaxQty = parseInt(formData.get("leaderMaxQty"), 10) || 0;
+    const rawMaxQty = parseInt(formData.get("leaderMaxQty"), 10);
+    const leaderMaxQty = isNaN(rawMaxQty) || rawMaxQty < 0 ? 0 : rawMaxQty;
+
+    const rawStarting = parseInt(formData.get("startingParticipants"), 10);
+    const startingParticipants = isNaN(rawStarting) || rawStarting < 0 ? 0 : rawStarting;
     
-    // ✨ ONLY SAVE TO DB - NO SHIPPING MOVES REQUIRED!
     const newCampaign = await db.campaign.create({
       data: {
         shop: session.shop,
@@ -177,7 +151,7 @@ export const action = async ({ request }) => {
         leaderMaxQty: leaderMaxQty,
         tiersJson: JSON.stringify(tiers),
         status: "ACTIVE",
-        startingParticipants: parseInt(formData.get("startingParticipants"), 10) || 0,
+        startingParticipants: startingParticipants,
         scope: formData.get("scope"),
         countingMethod: formData.get("countingMethod"),
         sellingPlanId: generatedSellingPlanId, 
@@ -186,7 +160,6 @@ export const action = async ({ request }) => {
     });
 
     await toggleContinueSelling(admin, session.shop, newCampaign.productId, newCampaign.id, "START");
-
     return redirect(`/app/campaigns/${newCampaign.id}?success=true`);
 
   } catch (error) {
@@ -197,9 +170,7 @@ export const action = async ({ request }) => {
 };
 
 export default function NewCampaignPage() {
-  // ✨ 3. Call useLoaderData to access the translated strings
   const { translations } = useLoaderData();
-
   const submit = useSubmit();
   const navigation = useNavigation();
   const actionData = useActionData();
@@ -211,76 +182,33 @@ export default function NewCampaignPage() {
   const [isFormValid, setIsFormValid] = useState(false);
   const isBusy = navigation.state === 'submitting' || navigation.state === 'loading';
 
-  useEffect(() => {
-    if (isDirty) {
-      app.saveBar.show('campaign-save-bar');
-    } else {
-      app.saveBar.hide('campaign-save-bar');
-    }
-  }, [isDirty, app]);
+  useEffect(() => { isDirty ? app.saveBar.show('campaign-save-bar') : app.saveBar.hide('campaign-save-bar'); }, [isDirty, app]);
   
-  const blocker = useBlocker(
-    ({ currentLocation, nextLocation }) =>
-      isDirty && currentLocation.pathname !== nextLocation.pathname
-  );
+  const blocker = useBlocker(({ currentLocation, nextLocation }) => isDirty && currentLocation.pathname !== nextLocation.pathname);
 
-  const handleDirtyChange = useCallback((dirty) => {
-    setIsDirty(dirty);
-  }, []);
-
-  const handleValidityChange = useCallback((isValid) => {
-    setIsFormValid(isValid);
-  }, []);
-  
-  const handleSave = () => {
-    campaignFormRef.current?.submit(); 
-  };
-
-  const handleDiscard = () => { 
-    campaignFormRef.current?.discard(); 
-  };
-  
-  const handleBackAction = () => {
-    navigate('/app');
-  };
+  const handleDirtyChange = useCallback((dirty) => { setIsDirty(dirty); }, []);
+  const handleValidityChange = useCallback((isValid) => { setIsFormValid(isValid); }, []);
+  const handleSave = () => { campaignFormRef.current?.submit(); };
+  const handleDiscard = () => { campaignFormRef.current?.discard(); };
+  const handleBackAction = () => { navigate('/app'); };
 
   useEffect(() => {
     if (blocker.state === "blocked") {
-      app.saveBar.leaveConfirmation()
-        .then((confirmed) => confirmed ? blocker.proceed() : blocker.reset());
+      app.saveBar.leaveConfirmation().then((confirmed) => confirmed ? blocker.proceed() : blocker.reset());
     }
   }, [blocker, app]);
   
   return (
-    <Page
-      title={translations.title}
-      backAction={{ content: translations.campaignsLabel, onAction: handleBackAction }}
-    >
+    <Page title={translations.title} backAction={{ content: translations.campaignsLabel, onAction: handleBackAction }}>
       <SaveBar id="campaign-save-bar">
-        <button 
-          variant="primary" 
-          onClick={handleSave}
-          loading={isBusy ? "" : undefined}
-          disabled={!isFormValid || isBusy}
-        >
-          {translations.save} {/* ✨ Translated Save Button */}
+        <button variant="primary" onClick={handleSave} loading={isBusy ? "" : undefined} disabled={!isFormValid || isBusy}>
+          {translations.save}
         </button>
-        <button onClick={handleDiscard}>
-          {translations.discard} {/* ✨ Translated Discard Button */}
-        </button>
+        <button onClick={handleDiscard}>{translations.discard}</button>
       </SaveBar>
-
       <Layout>
         <Layout.Section>
-          <CampaignForm
-            ref={campaignFormRef}
-            onDirtyChange={handleDirtyChange}
-            onValidityChange={handleValidityChange}
-            isStarted={false}
-            hasParticipants={false}
-            formErrors={actionData?.errors}
-            translations={translations.form}
-          />
+          <CampaignForm ref={campaignFormRef} onDirtyChange={handleDirtyChange} onValidityChange={handleValidityChange} isStarted={false} hasParticipants={false} formErrors={actionData?.errors} translations={translations.form} />
         </Layout.Section>
       </Layout>
     </Page>

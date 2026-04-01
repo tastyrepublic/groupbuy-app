@@ -262,7 +262,14 @@
         "remove": "移除",
         "tierPrefix": "級別",
         "countBuyersTooltip": "無論顧客購買多少商品，每位不重複顧客的訂單進度僅增加 1，同一位顧客在同一個活動中的重複購買將不予計算。",
-        "countItemsTooltip": "進度將根據顧客實際購買的商品總數量來計算。"
+        "countItemsTooltip": "進度將根據顧客實際購買的商品總數量來計算。",
+        "errors": {
+          "minQty": "必須大於 0。",
+          "minDiscount": "必須大於 0。",
+          "maxDiscount": "最大 100。",
+          "greaterThanQty": "必須大於",
+          "greaterThanDiscount": "必須大於"
+        }
       },
       "features": {
         "title": "特別功能",
@@ -286,7 +293,18 @@
       "currentTime": "目前",
       "is": "的時間為",
       "singleProductWarning": "每個活動只能選擇一款產品或同款產品的不同顏色。",
-      "removeAll": "全部移除"
+      "removeAll": "全部移除",
+      "selectProduct": "請選擇一個產品。",
+      "selectVariant": "必須至少選擇一個產品規格。",
+      "invalidLeaderDiscount": "必須為 0-100。",
+      "pastStartDate": "不能為過去的時間。",
+      "autoStartWarning": "設定時間已過，活動將在儲存後立即開始。",
+      "invalidEndDate": "結束時間必須在未來。",
+      "finalPrice": "折後價格：",
+      "inStock": "件庫存",
+      "outOfStock": "缺貨",
+      "editInShopify": "在 Shopify 中編輯產品",
+      "liveTimeFormat": "{{year}}年{{month}}{{day}}日 {{time}}"
     },
     "errors": {
       "noProduct": "請選擇一個產品。",
@@ -299,6 +317,15 @@
     },
     "messages": {
       "success": "活動建立成功！"
+    },
+    "dateTimePicker": {
+      "timeLabel": "時間",
+      "selectTime": "選擇時間",
+      "daysOfWeek": ["一", "二", "三", "四", "五", "六", "日"],
+      "months": ["1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月"],
+      "monthsShort": ["1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月"],
+      "headerFormat": "{{year}}年 {{month}}",
+      "dateFormat": "{{year}}年 {{month}}{{day}}日"
     }
   },
   "EditCampaign": { 

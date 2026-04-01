@@ -260,7 +260,14 @@
         "remove": "Remove",
         "tierPrefix": "Tier",
         "countBuyersTooltip": "Progress increases by 1 for each unique customer's order and repeat customer in same campaign won't count, regardless of how many items they buy.",
-        "countItemsTooltip": "Progress increases based on the actual quantity of items purchased."
+        "countItemsTooltip": "Progress increases based on the actual quantity of items purchased.",
+        "errors": {
+          "minQty": "Must be > 0.",
+          "minDiscount": "Must be > 0.",
+          "maxDiscount": "Max 100.",
+          "greaterThanQty": "Must be >",
+          "greaterThanDiscount": "Must be >"
+        }
       },
       "features": {
         "title": "Features",
@@ -284,7 +291,19 @@
       "currentTime": "Current time in",
       "is": "is",
       "singleProductWarning": "You can only select variants from a single product for each campaign.",
-      "removeAll": "Remove all"
+      "removeAll": "Remove all",
+      "selectProduct": "You must select a product.",
+      "selectVariant": "You must select at least one product variant.",
+      "invalidLeaderDiscount": "Must be 0-100.",
+      "pastStartDate": "Cannot be in the past.",
+      "autoStartWarning": "Time has passed. Campaign will start instantly upon saving.",
+      "invalidEndDate": "End time must be in the future.",
+      "finalPrice": "Final price:",
+      "inStock": "in stock",
+      "outOfStock": "out of stock",
+      "editInShopify": "Edit Product in Shopify",
+      "liveTimeFormat": "{{month}} {{day}}, {{year}}, {{time}}"
+  
     },
     "errors": {
       "noProduct": "Please select a product.",
@@ -297,6 +316,15 @@
     },
     "messages": {
       "success": "Campaign created successfully!"
+    },
+    "dateTimePicker": {
+      "timeLabel": "Time",
+      "selectTime": "Select time",
+      "daysOfWeek": ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"],
+      "months": ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"],
+      "monthsShort": ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
+      "headerFormat": "{{month}} {{year}}",
+      "dateFormat": "{{month}} {{day}}, {{year}}"
     }
   },
   "EditCampaign": {
