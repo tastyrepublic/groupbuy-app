@@ -426,6 +426,21 @@ exports.campaignFinalizer = onSchedule("every 5 minutes", async (event) => {
 
       await revertInventoryPolicy(campaign, campaign.shop, session.accessToken);
 
+      // ✨ Strip the exact tag this campaign applied!
+      if (campaign.appliedDiscountTag) {
+        try {
+          await shopifyGraphQL(campaign.shop, session.accessToken,
+            `mutation tagsRemove($id: ID!, $tags: [String!]!) {
+              tagsRemove(id: $id, tags: $tags) { userErrors { message } }
+            }`,
+            { id: campaign.productId, tags: [campaign.appliedDiscountTag] }
+          );
+          console.log(`   - 🏷️ Removed campaign tag: ${campaign.appliedDiscountTag}`);
+        } catch (err) {
+          console.error("   - ❌ Failed to remove campaign tag:", err.message);
+        }
+      }
+
       const finalStatus = anyVariantSucceeded ? "SUCCESSFUL" : "FAILED";
       await prisma.campaign.update({
         where: { id: campaign.id },

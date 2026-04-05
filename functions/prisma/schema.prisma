@@ -50,6 +50,7 @@ model Campaign {
   updatedAt          DateTime @updatedAt
   scope              String @default("PRODUCT") // "PRODUCT" or "VARIANT"
   countingMethod     String @default("PARTICIPANT") // "PARTICIPANT" or "ITEM_QUANTITY"
+  appliedDiscountTag    String?
 
 // --- NEW FIELDS ---
   startingParticipants Int    @default(0) // For the marketing boost
@@ -115,6 +116,13 @@ model Settings {
 
   // ✨ NEW: Onboarding Gatekeeper
   isOnboarded                 Boolean  @default(false)
+
+  // ✨ NEW: The Master Toggle
+  enableAutoTagging           Boolean  @default(false)
+
+  // ✨ NEW: Integration Settings
+  autoDiscountTag             String?  @default("group-buy-active")
+  hiddenDeliveryRates         String?  @default("[]")
   
   createdAt                   DateTime @default(now())
   updatedAt                   DateTime @updatedAt

@@ -34,28 +34,37 @@ const shopify = shopifyApp({
       // 1. Shopify registers the webhooks you put in the .toml file
       shopify.registerWebhooks({ session });
 
-      // 2. Fetch the contact email the exact second they install
+      // 2. Fetch the contact email AND Address the exact second they install
       try {
         const response = await admin.graphql(`
           #graphql
           query getContactEmailOnInstall {
             shop {
               contactEmail
+              billingAddress { address1 city country zip } # ✨ FETCH ADDRESS HERE
             }
           }
         `);
         
         const { data } = await response.json();
         const contactEmail = data?.shop?.contactEmail;
+        
+        // ✨ Parse the address
+        const addr = data?.shop?.billingAddress;
+        const fallbackAddress = addr ? [addr.address1, addr.city, addr.country, addr.zip].filter(Boolean).join(', ') : "";
 
         if (contactEmail) {
-          // 3. Create their Settings row immediately
+          // 3. Create their Settings row immediately with ALL defaults
           await prisma.settings.upsert({
             where: { shop: session.shop },
             update: { contactEmail: contactEmail },
             create: { 
               shop: session.shop, 
               contactEmail: contactEmail,
+              emailStoreAddress: fallbackAddress, // ✨ Save the address immediately!
+              hiddenDeliveryRates: "[]",          // ✨ Ensure new array format is seeded
+              enableAutoTagging: false,           // ✨ Default new features
+              autoDiscountTag: "group-buy-active",
               isOnboarded: false,
               successEmailSubject: JSON.stringify(DEFAULT_EMAIL_TEMPLATES.successSubject),
               successEmailBody: JSON.stringify(DEFAULT_EMAIL_TEMPLATES.successBody),
@@ -63,10 +72,10 @@ const shopify = shopifyApp({
               failedEmailBody: JSON.stringify(DEFAULT_EMAIL_TEMPLATES.failedBody)
             },
           });
-          console.log(`[Install Sync] Captured contactEmail for new install: ${session.shop}`);
+          console.log(`[Install Sync] Captured contactEmail and Address for new install: ${session.shop}`);
         }
       } catch (error) {
-        console.error(`[Install Sync] Failed to fetch contactEmail for ${session.shop}:`, error);
+        console.error(`[Install Sync] Failed to fetch data for ${session.shop}:`, error);
       }
     },
   },

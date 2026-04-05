@@ -248,9 +248,17 @@ export const action = async ({ request }) => {
     // 2. Toggle Inventory & Delete DB
     await toggleContinueSelling(admin, session.shop, campaign.productId, campaign.id, "END");
 
-    await db.campaign.delete({
-      where: { id: campaignId },
-    });
+    // ✨ REMOVE THE TAG FROM THE PRODUCT (Always attempt cleanup!)
+    const shopSettings = await db.settings.findUnique({ where: { shop: session.shop } });
+    if (campaign.appliedDiscountTag) {
+      await admin.graphql(`
+        mutation tagsRemove($id: ID!, $tags: [String!]!) {
+          tagsRemove(id: $id, tags: $tags) { userErrors { message } }
+        }
+      `, { variables: { id: campaign.productId, tags: [campaign.appliedDiscountTag] } });
+    }
+
+    await db.campaign.delete({ where: { id: campaignId } });
     
     return json({ success: true });
   }

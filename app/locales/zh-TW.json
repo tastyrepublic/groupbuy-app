@@ -20,6 +20,13 @@
       "pageTitle": "庫存自動化",
       "pageDesc": "設定團購活動開始和結束時，系統應如何自動處理您的產品庫存。"
     },
+    "integrations": {
+      "title": "整合與自動化",
+      "description": "設定自動標籤，讓其他應用程式可以與您的進行中活動互動。",
+      "enableTagLabel": "為團購商品啟用自動標籤",
+      "enableTagHelp": "自動為進行中的活動套用特定標籤，以便其他應用程式（例如Regios或其他折扣應用程式）可以輕鬆排除或識別這些商品。",
+      "tagNameLabel": "自動標籤名稱"
+    },
     "email": {
       "title": "電子郵件通知",
       "description": "當團購活動結束時，自動發送自訂電子郵件給顧客。這些信件將取代 Shopify 預設的取消訂單通知，以避免重複發送 (只影響團購訂單)。",
@@ -112,14 +119,23 @@
     },
     "shipping": {
       "title": "運費策略",
-      "description": "將團購商品排除在免運門檻之外，以保護您的利潤。",
+      "description": "當購物車中含有團購商品時，選擇性隱藏特定的運費選項（例如免運或特快配送）。",
       "boxTitle": "運費守護者狀態 (Shipping Guardian)",
       "activeTitle": "守護者已啟用",
       "inactiveTitle": "守護者未啟用",
-      "activeDesc": "團購商品已排除在免運優惠之外。",
+      "activeDesc": "已勾選的運費選項將在團購結帳時被隱藏。",
       "inactiveDesc": "團購商品目前適用標準運費規則。",
       "manageBtn": "管理運費規則",
-      "configureBtn": "設定運費規則"
+      "configureBtn": "設定運費規則",
+      "multiSelectTitle": "選擇在團購期間隱藏的運費選項",
+      "multiSelectDesc": "勾選所有您希望在購買團購商品時停用的運費選項。",
+      "cost": "運費",
+      "transit": "配送說明",
+      "weight": "重量",
+      "orders": "訂單金額",
+      "free": "免費",
+      "over": "超過",
+      "upTo": "最高"
     },
     "storefront": {
       "title": "店面顯示設定",
@@ -482,7 +498,7 @@
     "settings": "設定"
   },
   "Onboarding": {
-    "pageTitle": "歡迎使用團購外掛！🎉",
+    "pageTitle": "歡迎使用團購程式！🎉",
     "welcomeTitle": "為什麼需要這些設定？",
     "welcomeDesc": "為了確保您的顧客擁有完美的購物體驗，團購外掛需要授權來自動化您的庫存、發送自動化郵件，並保護您的結帳流程避免被濫用。",
     "stepProgress": "設定步驟 {step} / {total}",
@@ -496,6 +512,7 @@
     "step3HelpLocked": "請啟用上方的兩個擴充功能以解鎖此核取方塊。",
     "step3HelpUnlocked": "兩個擴充功能皆已啟用！您可以繼續下一步。",
     "optionalBadge": "可自行決定，但建議完成以獲得最佳體驗。",
+    "shippingNote": "啟用後，您可以在主要的「設定」頁面中，精確選擇要隱藏哪些運費選項（例如免運費）。",
     "prevBtn": "上一步",
     "nextBtn": "下一步",
     "completeBtn": "完成設定並進入儀表板"

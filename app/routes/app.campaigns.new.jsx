@@ -136,6 +136,14 @@ export const action = async ({ request }) => {
     const rawStarting = parseInt(formData.get("startingParticipants"), 10);
     const startingParticipants = isNaN(rawStarting) || rawStarting < 0 ? 0 : rawStarting;
     
+    // ✨ SNAPSHOT STEP 1: Fetch the global settings BEFORE creating the campaign
+    const shopSettings = await db.settings.findUnique({ where: { shop: session.shop } });
+    let tagToApply = null;
+
+    if (shopSettings?.enableAutoTagging && shopSettings?.autoDiscountTag) {
+      tagToApply = shopSettings.autoDiscountTag;
+    }
+
     const newCampaign = await db.campaign.create({
       data: {
         shop: session.shop,
@@ -156,10 +164,43 @@ export const action = async ({ request }) => {
         countingMethod: formData.get("countingMethod"),
         sellingPlanId: generatedSellingPlanId, 
         sellingPlanGroupId: generatedSellingPlanGroupId,
+        appliedDiscountTag: tagToApply, // ✨ SNAPSHOT STEP 2: Save the exact string to the campaign memory!
       },
     });
 
     await toggleContinueSelling(admin, session.shop, newCampaign.productId, newCampaign.id, "START");
+    
+    // ✨ SNAPSHOT STEP 3: Apply the tag using the snapshotted variable
+    if (tagToApply) {
+      try {
+        console.log(`🏷️ Attempting to add tag "${tagToApply}" to ${newCampaign.productId}`);
+        
+        const tagResponse = await admin.graphql(`
+          mutation tagsAdd($id: ID!, $tags: [String!]!) {
+            tagsAdd(id: $id, tags: $tags) { 
+              node { id }
+              userErrors { message } 
+            }
+          }
+        `, { 
+          variables: { 
+            id: newCampaign.productId, 
+            tags: [tagToApply] 
+          } 
+        });
+
+        const tagData = await tagResponse.json();
+        
+        if (tagData.data?.tagsAdd?.userErrors?.length > 0) {
+          console.error("❌ Shopify rejected the tag:", tagData.data.tagsAdd.userErrors);
+        } else {
+          console.log("✅ Tag added successfully!");
+        }
+      } catch (tagError) {
+        console.error("❌ Error running tag mutation:", tagError.message);
+      }
+    }
+
     return redirect(`/app/campaigns/${newCampaign.id}?success=true`);
 
   } catch (error) {

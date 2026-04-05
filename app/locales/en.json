@@ -19,6 +19,13 @@
       "pageTitle": "Inventory Automation",
       "pageDesc": "Configure how the app handles your product inventory when a campaign starts and ends."
     },
+    "integrations": {
+      "title": "Integrations & Automations",
+      "description": "Configure auto-tags so other apps can interact with your active campaigns.",
+      "enableTagLabel": "Enable Auto-Tagging for Group Buy Products",
+      "enableTagHelp": "Automatically apply a specific tag to active campaigns so other apps (like Regios or other discount apps) can easily exclude them.",
+      "tagNameLabel": "Auto-Tag Name"
+    },
     "email": {
       "title": "Email Notifications",
       "description": "Automatically send custom emails to customers when a group buy finishes. These replace Shopify's default cancellation emails to prevent duplication (only effects group buy orders).",
@@ -111,14 +118,23 @@
     },
     "shipping": {
       "title": "Shipping Strategy",
-      "description": "Exclude Group Buy items from free shipping thresholds to protect your profit margins.",
+      "description": "Selectively hide specific shipping rates (like Free or Express shipping) when a Group Buy item is in the cart.",
       "boxTitle": "Shipping Guardian Status",
       "activeTitle": "Guardian is Active",
       "inactiveTitle": "Guardian is Inactive",
-      "activeDesc": "Group Buy items are excluded from free shipping.",
+      "activeDesc": "Selected shipping rates are actively hidden from Group Buy orders.",
       "inactiveDesc": "Standard shipping rules apply to Group Buy items.",
       "manageBtn": "Manage Shipping Rule",
-      "configureBtn": "Configure Shipping Rule"
+      "configureBtn": "Configure Shipping Rule",
+      "multiSelectTitle": "Select Shipping Rates to Hide during Group Buys",
+      "multiSelectDesc": "Check all rates you want disabled when a Group Buy item is in the cart.",
+      "cost": "Cost",
+      "transit": "Transit",
+      "weight": "Weight",
+      "orders": "Orders",
+      "free": "Free",
+      "over": "Over",
+      "upTo": "Up to"
     },
     "storefront": {
       "title": "Storefront Display",
@@ -495,6 +511,7 @@
     "step3HelpLocked": "Please activate both extensions above to unlock this checkbox.",
     "step3HelpUnlocked": "Both extensions are active! You may proceed.",
     "optionalBadge": "Optional, but recommended for best experience.",
+    "shippingNote": "Once activated, you can choose exactly which shipping rates to hide (like Free Shipping) later in the main Settings page.",
     "prevBtn": "Previous Step",
     "nextBtn": "Next Step",
     "completeBtn": "Complete Setup & Enter Dashboard"

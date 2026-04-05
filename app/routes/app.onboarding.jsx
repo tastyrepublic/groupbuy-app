@@ -391,9 +391,16 @@ export default function OnboardingWizard() {
                       <span style={{ display: 'flex' }}><Icon source={isGuardianActive ? CheckCircleIcon : InfoIcon} tone={isGuardianActive ? "info" : "subdued"} /></span>
                       <Text variant="headingMd" as="h2">{translations.shipping?.boxTitle || "Shipping Guardian"}</Text>
                     </div>
+
+                    {/* ✨ NEW: Reassuring explanation note! */}
+                    <Text as="p" tone="subdued">
+                      {translations.onboarding?.shippingNote || "Note: Once activated, you can choose exactly which shipping rates to hide (like Free Shipping) later in the main Settings page."}
+                    </Text>
+
                     <Banner tone={isGuardianActive ? "info" : "warning"} title={isGuardianActive ? (translations.shipping?.activeTitle || "Active") : (translations.shipping?.inactiveTitle || "Action Required")}>
                       <p>{isGuardianActive ? translations.shipping?.activeDesc : translations.shipping?.inactiveDesc}</p>
                     </Banner>
+                    
                     <div style={{ display: 'flex' }}>
                       <Button onClick={() => open('shopify://admin/settings/shipping', '_blank')}>{isGuardianActive ? (translations.shipping?.manageBtn || "Manage") : (translations.shipping?.configureBtn || "Configure")}</Button>
                     </div>

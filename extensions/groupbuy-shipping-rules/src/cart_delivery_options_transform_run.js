@@ -1,31 +1,28 @@
 // @ts-check
-
 export function run(input) {
   let hasGroupBuyItem = false;
 
-  // 1. Check if ANY item in the cart is a Group Buy item
   if (input.cart.lines) {
     input.cart.lines.forEach(line => {
-      if (line.sellingPlanAllocation?.sellingPlan?.id) {
-        hasGroupBuyItem = true;
-      }
+      if (line.sellingPlanAllocation?.sellingPlan?.id) { hasGroupBuyItem = true; }
     });
   }
 
+  // ✨ Parse the JSON array from the Metafield
+  const hiddenRatesJson = input.deliveryCustomization?.metafield?.value || "[]";
+  const ratesToHide = JSON.parse(hiddenRatesJson);
+  
   let operations = [];
 
-  // 2. If a Group Buy item exists, act as the Bouncer: HIDE FREE SHIPPING.
   if (hasGroupBuyItem && input.cart.deliveryGroups) {
     input.cart.deliveryGroups.forEach(group => {
       group.deliveryOptions.forEach(option => {
-        const shippingCost = parseFloat(option.cost.amount);
         
-        // If Shopify tries to give them a $0.00 rate, delete it.
-        if (shippingCost === 0) {
-          operations.push({ 
-            deliveryOptionHide: { deliveryOptionHandle: option.handle } 
-          });
+        // ✨ Rule B: Hide it ONLY if the title is inside the merchant's checked list!
+        if (ratesToHide.includes(option.title)) {
+          operations.push({ deliveryOptionHide: { deliveryOptionHandle: option.handle } });
         }
+        
       });
     });
   }

@@ -1,7 +1,7 @@
 import { json } from "@remix-run/node";
 import { useLoaderData, useFetcher, useBlocker } from "@remix-run/react"; // ✨ Added useBlocker
 import {
-  Page, Layout, Card, Checkbox, BlockStack, InlineStack, Text, Box, FormLayout, Button, Icon, Banner
+  Page, Layout, Card, Checkbox, BlockStack, InlineStack, Text, TextField, Box, FormLayout, Button, Icon, Banner
 } from "@shopify/polaris";
 import { InfoIcon, CheckCircleIcon, AlertCircleIcon, ShieldCheckMarkIcon } from '@shopify/polaris-icons';
 import { useState, useEffect } from "react";
@@ -20,6 +20,8 @@ export const loader = async ({ request }) => {
   // ✨ Deploy the Guard!
   await requireSetup(session, request);
 
+  const { t } = await getI18n(request);
+
   let dbSettings = await db.settings.findUnique({ where: { shop: session.shop } });
 
   const response = await admin.graphql(`
@@ -30,12 +32,126 @@ export const loader = async ({ request }) => {
       deliveryCustomizations(first: 10) { nodes { enabled shopifyFunction { id } } }
       shop {
         billingAddress { address1 city country zip }
-        contactEmail # ✨ NEW: Grab the live email from Shopify!
+        contactEmail
+      }
+      # ✨ OPTIMIZED: Reduced limits to 5 profiles, 10 zones, and 15 methods to bypass the 1000 limit!
+      deliveryProfiles(first: 5) {
+        nodes {
+          name
+          profileLocationGroups {
+            locationGroupZones(first: 10) {
+              nodes {
+                methodDefinitions(first: 15) {
+                  nodes {
+                    name
+                    description
+                    methodConditions {
+                      field
+                      operator
+                      conditionCriteria {
+                        ... on Weight { value unit }
+                        ... on MoneyV2 { amount currencyCode }
+                      }
+                    }
+                    rateProvider {
+                      ... on DeliveryRateDefinition {
+                        price { amount currencyCode }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     }
   `);
 
   const { data } = await response.json();
+  
+  // ✨ UPGRADED PARSER: Translates GraphQL conditions into human-readable text
+  const groupedRates = data?.deliveryProfiles?.nodes?.map(profile => {
+    const rateMap = new Map();
+    
+    profile.profileLocationGroups?.forEach(group => {
+      group.locationGroupZones?.nodes?.forEach(zone => {
+        zone.methodDefinitions?.nodes?.forEach(method => {
+          if (!rateMap.has(method.name)) {
+            
+            // 1. Parse the Cost
+            let costStr = "";
+            if (method.rateProvider?.price) {
+              const amount = parseFloat(method.rateProvider.price.amount);
+              // ✨ Translated "Free"
+              costStr = amount === 0 ? t("Settings.shipping.free", "Free") : `${method.rateProvider.price.currencyCode} ${amount.toFixed(2)}`;
+            }
+
+            // 2. ✨ NEW: Parse the Conditions!
+            let conditionStr = "";
+            if (method.methodConditions && method.methodConditions.length > 0) {
+              let minWeight, maxWeight, minPrice, maxPrice, weightUnit, priceCur;
+              
+              method.methodConditions.forEach(cond => {
+                const isWeight = cond.field === 'TOTAL_WEIGHT';
+                const isPrice = cond.field === 'TOTAL_PRICE';
+                
+                const weightVal = cond.conditionCriteria?.value;
+                const wUnit = cond.conditionCriteria?.unit;
+                
+                const priceVal = cond.conditionCriteria?.amount;
+                const pUnit = cond.conditionCriteria?.currencyCode;
+
+                if (isWeight && weightVal !== undefined) {
+                  weightUnit = wUnit;
+                  if (cond.operator && cond.operator.includes('GREATER_THAN')) minWeight = weightVal;
+                  if (cond.operator && cond.operator.includes('LESS_THAN')) maxWeight = weightVal;
+                }
+                
+                if (isPrice && priceVal !== undefined) {
+                  priceCur = pUnit;
+                  if (cond.operator && cond.operator.includes('GREATER_THAN')) minPrice = priceVal;
+                  if (cond.operator && cond.operator.includes('LESS_THAN')) maxPrice = priceVal;
+                }
+              });
+
+              const parts = [];
+              const tWeight = t("Settings.shipping.weight", "Weight");
+              const tOrders = t("Settings.shipping.orders", "Orders");
+              const tOver = t("Settings.shipping.over", "Over");
+              const tUpTo = t("Settings.shipping.upTo", "Up to");
+
+              // ✨ Translated Conditions!
+              if (minWeight !== undefined && maxWeight !== undefined) parts.push(`${tWeight}: ${minWeight} - ${maxWeight} ${weightUnit || ''}`);
+              else if (minWeight !== undefined) parts.push(`${tWeight}: ${tOver} ${minWeight} ${weightUnit || ''}`);
+              else if (maxWeight !== undefined) parts.push(`${tWeight}: ${tUpTo} ${maxWeight} ${weightUnit || ''}`);
+
+              if (minPrice !== undefined && maxPrice !== undefined) parts.push(`${tOrders}: ${minPrice} - ${maxPrice} ${priceCur || ''}`);
+              else if (minPrice !== undefined) parts.push(`${tOrders}: ${tOver} ${minPrice} ${priceCur || ''}`);
+              else if (maxPrice !== undefined) parts.push(`${tOrders}: ${tUpTo} ${maxPrice} ${priceCur || ''}`);
+
+              conditionStr = parts.join(" | ");
+            }
+            
+            // 3. Save it to the Map
+            rateMap.set(method.name, {
+              label: method.name,
+              value: method.name,
+              description: method.description,
+              condition: conditionStr, 
+              cost: costStr
+            });
+          }
+        });
+      });
+    });
+
+    return {
+      title: profile.name,
+      options: Array.from(rateMap.values())
+    };
+  }).filter(group => group.options.length > 0) || [];
+  
   const liveContactEmail = data?.shop?.contactEmail;
 
   // ✨ NEW: The Self-Healing Sync
@@ -64,7 +180,10 @@ export const loader = async ({ request }) => {
     emailLogoUrl: dbSettings?.emailLogoUrl ?? "",
     emailStoreAddress: dbSettings?.emailStoreAddress ?? fallbackAddress,
     emailHeaderColor: dbSettings?.emailHeaderColor ?? "#000000",
-    contactEmail: dbSettings?.contactEmail || liveContactEmail 
+    contactEmail: dbSettings?.contactEmail || liveContactEmail,
+    enableAutoTagging: dbSettings?.enableAutoTagging ?? false,
+    autoDiscountTag: dbSettings?.autoDiscountTag ?? "group-buy-active",
+    hiddenDeliveryRates: dbSettings?.hiddenDeliveryRates ?? "[]", 
   };
 
   const enforcerFunctionId = data?.shopifyFunctions?.nodes?.find(f => f.title.includes("Cart Enforcer"))?.id;
@@ -73,9 +192,8 @@ export const loader = async ({ request }) => {
   const isEnforcerActive = data?.validations?.nodes?.some((rule) => rule.shopifyFunction?.id === enforcerFunctionId && rule.enabled === true) || false;
   const isGuardianActive = data?.deliveryCustomizations?.nodes?.some((cust) => cust.shopifyFunction?.id === guardianFunctionId && cust.enabled === true) || false;
 
-  const { t } = await getI18n(request);
   return json({ 
-    settings, isEnforcerActive, isGuardianActive, 
+    settings, isEnforcerActive, isGuardianActive, groupedRates,
     shopEmail: session.shop.replace('.myshopify.com', '@gmail.com'),
     translations: {
       title: t("Settings.title", "Settings"),
@@ -83,6 +201,7 @@ export const loader = async ({ request }) => {
       discardButton: t("Settings.discard", "Discard"),
       toastSaved: t("Settings.saved", "Settings saved"),
       inventory: t("Settings.inventory", { returnObjects: true }),
+      integrations: t("Settings.integrations", { returnObjects: true }), // ✨ ADDED THIS LINE!
       checkout: t("Settings.checkout", { returnObjects: true }),
       shipping: t("Settings.shipping", { returnObjects: true }),
       email: t("Settings.email", { returnObjects: true }),
@@ -97,6 +216,7 @@ export const action = async ({ request }) => {
   const actionType = formData.get("_action")
   
   if (actionType === "save_general") {
+    const hiddenDeliveryRatesStr = formData.get("hiddenDeliveryRates") || "[]";
     const dataObj = {
       autoContinueSelling: formData.get("autoContinueSelling") === "true", 
       disableContinueSellingOnEnd: formData.get("disableContinueSellingOnEnd") === "true",
@@ -108,7 +228,10 @@ export const action = async ({ request }) => {
       failedEmailBody: formData.get("failedEmailBody"),
       emailLogoUrl: formData.get("emailLogoUrl"),
       emailStoreAddress: formData.get("emailStoreAddress"),
-      emailHeaderColor: formData.get("emailHeaderColor")
+      emailHeaderColor: formData.get("emailHeaderColor"),
+      enableAutoTagging: formData.get("enableAutoTagging") === "true",
+      autoDiscountTag: formData.get("autoDiscountTag"),
+      hiddenDeliveryRates: hiddenDeliveryRatesStr
     };
 
     await db.settings.upsert({
@@ -116,6 +239,21 @@ export const action = async ({ request }) => {
       update: dataObj,
       create: { shop: session.shop, ...dataObj },
     });
+
+    // ✨ Find the Guardian function and save the Metafield directly to it!
+    const extResponse = await admin.graphql(`query { deliveryCustomizations(first: 25) { nodes { id shopifyFunction { title } } } }`);
+    const extData = await extResponse.json();
+    const guardianId = extData.data?.deliveryCustomizations?.nodes?.find(f => f.shopifyFunction?.title.includes("Shipping Guardian"))?.id;
+
+    if (guardianId) {
+    await admin.graphql(`
+        mutation {
+          deliveryCustomizationUpdate(id: "${guardianId}", deliveryCustomization: {
+            metafields: [{ namespace: "$app:groupbuy", key: "hidden_rates", type: "single_line_text_field", value: ${JSON.stringify(hiddenDeliveryRatesStr)} }]
+          }) { userErrors { message } }
+        }
+      `);
+    }
     return json({ success: true, action: "save" });
   }
 
@@ -230,34 +368,52 @@ export const action = async ({ request }) => {
 };
 
 export default function SettingsPage() {
-  const { settings, isEnforcerActive, isGuardianActive, shopEmail, translations } = useLoaderData();
+  const { settings, isEnforcerActive, isGuardianActive, shopEmail, translations, groupedRates } = useLoaderData();
   const fetcher = useFetcher();
   const app = useAppBridge();
 
   const [autoContinueSelling, setAutoContinueSelling] = useState(settings.autoContinueSelling);
   const [disableContinueSellingOnEnd, setDisableContinueSellingOnEnd] = useState(settings.disableContinueSellingOnEnd);
+
+  // ✨ THE RIGHT WAY: Dedicated state for Integration Settings, initialized instantly!
+  const [enableAutoTagging, setEnableAutoTagging] = useState(settings.enableAutoTagging);
+  const [autoDiscountTag, setAutoDiscountTag] = useState(settings.autoDiscountTag);
+  const [hiddenDeliveryRates, setHiddenDeliveryRates] = useState(JSON.parse(settings.hiddenDeliveryRates || "[]"));
+
   const [emailData, setEmailData] = useState({ isDirty: false, data: {} }); 
   
   // ✨ Added a reset key to wipe child components when "Discard" is clicked
   const [resetKey, setResetKey] = useState(0); 
 
-  const isGeneralDirty = autoContinueSelling !== settings.autoContinueSelling || disableContinueSellingOnEnd !== settings.disableContinueSellingOnEnd;
+  // ✨ Update the dirty checker to watch the new variables
+  const isGeneralDirty = 
+    autoContinueSelling !== settings.autoContinueSelling || 
+    disableContinueSellingOnEnd !== settings.disableContinueSellingOnEnd ||
+    enableAutoTagging !== settings.enableAutoTagging ||
+    autoDiscountTag !== settings.autoDiscountTag ||
+    JSON.stringify(hiddenDeliveryRates) !== settings.hiddenDeliveryRates;
   const isPageDirty = isGeneralDirty || emailData.isDirty;
 
   // ✨ Handle Discard Action
   const handleDiscard = () => {
     setAutoContinueSelling(settings.autoContinueSelling);
     setDisableContinueSellingOnEnd(settings.disableContinueSellingOnEnd);
+    setEnableAutoTagging(settings.enableAutoTagging);
+    setAutoDiscountTag(settings.autoDiscountTag);
+    setHiddenDeliveryRates(JSON.parse(settings.hiddenDeliveryRates || "[]"));
     setEmailData({ isDirty: false, data: {} });
     setResetKey(prev => prev + 1); 
   };
 
-  // ✨ Handle Save Action
+  // ✨ Handle Save Action (Clean and straightforward!)
   const handleSave = () => {
     fetcher.submit({ 
       _action: "save_general", 
       autoContinueSelling: String(autoContinueSelling), 
       disableContinueSellingOnEnd: String(disableContinueSellingOnEnd),
+      enableAutoTagging: String(enableAutoTagging),
+      autoDiscountTag: autoDiscountTag,
+      hiddenDeliveryRates: JSON.stringify(hiddenDeliveryRates),
       ...emailData.data 
     }, { method: "post" });
   };
@@ -319,6 +475,30 @@ export default function SettingsPage() {
                   <Checkbox label={translations.inventory?.enableLabel} helpText={translations.inventory?.enableHelp} checked={autoContinueSelling} onChange={setAutoContinueSelling} />
                   <Checkbox label={translations.inventory?.disableLabel} helpText={translations.inventory?.disableHelp} checked={disableContinueSellingOnEnd} onChange={setDisableContinueSellingOnEnd} />
                 </FormLayout>
+              </Card>
+            </Layout.AnnotatedSection>
+
+            {/* ✨ TRANSLATED: Integration Settings UI */}
+            <Layout.AnnotatedSection 
+              title={translations.integrations?.title || "Integrations & Automations"} 
+              description={translations.integrations?.description}
+            >
+              <Card>
+                <BlockStack gap="400">
+                  <Checkbox
+                    label={translations.integrations?.enableTagLabel}
+                    checked={enableAutoTagging}
+                    onChange={setEnableAutoTagging}
+                    helpText={translations.integrations?.enableTagHelp}
+                  />
+
+                  <TextField
+                    label={translations.integrations?.tagNameLabel}
+                    value={autoDiscountTag}
+                    onChange={setAutoDiscountTag}
+                    disabled={!enableAutoTagging}
+                  />
+                </BlockStack>
               </Card>
             </Layout.AnnotatedSection>
 
@@ -465,11 +645,67 @@ export default function SettingsPage() {
                     <span style={{ display: 'flex' }}><Icon source={isGuardianActive ? CheckCircleIcon : InfoIcon} tone={isGuardianActive ? "info" : "subdued"} /></span>
                     <Text variant="headingMd" as="h2">{translations.shipping?.boxTitle}</Text>
                   </div>
+                  
                   <Banner tone={isGuardianActive ? "info" : "warning"} title={isGuardianActive ? translations.shipping?.activeTitle : translations.shipping?.inactiveTitle}>
                     <p>{isGuardianActive ? translations.shipping?.activeDesc : translations.shipping?.inactiveDesc}</p>
                   </Banner>
+
+                  {/* ✨ TRANSLATED: Dynamic Multi-Select Checkboxes */}
+                  <Box paddingBlockStart="200" paddingBlockEnd="200">
+                    <Text variant="headingSm" as="h3">{translations.shipping?.multiSelectTitle}</Text>
+                    
+                    {/* ✨ 1. Made the sub-description smaller */}
+                    <Text as="p" variant="bodySm" tone="subdued">{translations.shipping?.multiSelectDesc}</Text>
+                    
+                    <div style={{ marginTop: '12px', opacity: isGuardianActive ? 1 : 0.5, pointerEvents: isGuardianActive ? 'auto' : 'none' }}>
+                      <BlockStack gap="400">
+                        {groupedRates.map(group => (
+                          <div key={group.title} style={{ padding: '12px', backgroundColor: 'var(--p-color-bg-surface-secondary)', borderRadius: '8px' }}>
+                            <Text variant="bodyMd" fontWeight="bold">{group.title}</Text>
+                            <div style={{ marginTop: '8px' }}>
+                              <BlockStack gap="200">
+                                {group.options.map(opt => {
+                                  // ✨ Build a fully translated help text string
+                                  const helpTextParts = [];
+                                  if (opt.cost) helpTextParts.push(`${translations.shipping?.cost}: ${opt.cost}`);
+                                  if (opt.condition) helpTextParts.push(opt.condition); 
+                                  if (opt.description) helpTextParts.push(`${translations.shipping?.transit}: ${opt.description}`);
+                                  const finalHelpText = helpTextParts.join("  •  ");
+
+                                  return (
+                                    <Checkbox
+                                      key={opt.value}
+                                      label={opt.label}
+                                      
+                                      // ✨ 2. Wrapped the detail info in a small Text component!
+                                      helpText={<Text variant="bodySm" tone="subdued">{finalHelpText}</Text>} 
+                                      
+                                      checked={hiddenDeliveryRates.includes(opt.value)}
+                                      disabled={!isGuardianActive}
+                                      onChange={(checked) => {
+                                        setHiddenDeliveryRates(prev => {
+                                          if (checked) {
+                                            return [...prev, opt.value];
+                                          } else {
+                                            return prev.filter(r => r !== opt.value);
+                                          }
+                                        });
+                                      }}
+                                    />
+                                  );
+                                })}
+                              </BlockStack>
+                            </div>
+                          </div>
+                        ))}
+                      </BlockStack>
+                    </div>
+                  </Box>
+
                   <div style={{ display: 'flex' }}>
-                    <Button onClick={() => open('shopify://admin/settings/shipping', '_top')}>{isGuardianActive ? translations.shipping?.manageBtn : translations.shipping?.configureBtn}</Button>
+                    <Button onClick={() => open('shopify://admin/settings/shipping', '_top')}>
+                      {isGuardianActive ? translations.shipping?.manageBtn : translations.shipping?.configureBtn}
+                    </Button>
                   </div>
                 </BlockStack>
               </Card>

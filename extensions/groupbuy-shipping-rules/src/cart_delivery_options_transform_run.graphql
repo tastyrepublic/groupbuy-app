@@ -1,18 +1,21 @@
 query RunInput {
+  deliveryCustomization {
+    metafield(namespace: "$app:groupbuy", key: "hidden_rates") {
+      value
+    }
+  }
   cart {
     lines {
       sellingPlanAllocation {
-        sellingPlan {
-          id
-        }
+        sellingPlan { id }
       }
     }
     deliveryGroups {
       deliveryOptions {
         handle
-        cost {
-          amount
-        }
+        title
+        deliveryMethodType
+        cost { amount }
       }
     }
   }
