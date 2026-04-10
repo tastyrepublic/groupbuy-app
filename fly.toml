@@ -13,6 +13,7 @@ primary_region = 'sin'
 
 [env]
   PORT = '3000'
+  HOST = '0.0.0.0'
   SCOPES = 'read_checkouts,read_customers,read_orders,read_payment_customizations,read_publications,unauthenticated_read_checkouts,unauthenticated_read_product_listings,unauthenticated_write_checkouts,write_app_proxy,write_checkouts,write_order_edits,write_orders,write_payment_customizations,write_products,write_publications'
   SHOPIFY_API_KEY = '64f33a0c73521f54219f6883774470fa'
   SHOPIFY_APP_URL = 'https://groupbuy-app.fly.dev'

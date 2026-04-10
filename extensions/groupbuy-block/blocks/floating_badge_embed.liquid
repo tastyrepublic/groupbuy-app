@@ -151,30 +151,41 @@
 }
 {% endschema %}
 
+<style>
+  cart-drawer .gbs-floating-badge, .cart-drawer .gbs-floating-badge, #CartDrawer .gbs-floating-badge, mini-cart .gbs-floating-badge, .ajax-cart .gbs-floating-badge, cart-items .gbs-floating-badge, .cart-item .gbs-floating-badge,
+  cart-drawer .gbs-collection-timer, .cart-drawer .gbs-collection-timer, #CartDrawer .gbs-collection-timer, mini-cart .gbs-collection-timer, .ajax-cart .gbs-collection-timer, cart-items .gbs-collection-timer, .cart-item .gbs-collection-timer {
+    display: none !important;
+  }
+</style>
+
 <script>
   (function() {
     const config = {
       showOnCollection: {% if block.settings.show_on_collection == false %}false{% else %}true{% endif %},
       showOnRelated: {% if block.settings.show_on_related == false %}false{% else %}true{% endif %},
-      
       enableBadge: {% if block.settings.enable_badge == false %}false{% else %}true{% endif %},
       badgeBg: '{{ block.settings.badge_bg }}',
       badgeBorder: {% if block.settings.badge_border_enable %}'{{ block.settings.badge_border_width }}px solid {{ block.settings.badge_border_color }}'{% else %}'none'{% endif %},
       badgeRadius: '{{ block.settings.badge_radius }}px',
       badgeTextStyle: '{{ block.settings.badge_text_style }}',
-      
-      // ✨ NEW: Dynamic Drop Shadow Logic
       badgeShadow: {% if block.settings.badge_shadow_enable %}'{{ block.settings.badge_shadow_x }}px {{ block.settings.badge_shadow_y }}px {{ block.settings.badge_shadow_blur }}px {{ block.settings.badge_shadow_color }}'{% else %}'none'{% endif %},
-      
       enableTimer: {% if block.settings.enable_timer == false %}false{% else %}true{% endif %},
       timerTextStyle: '{{ block.settings.timer_text_style }}'
     };
-
+    
     const fetchedHandles = new Set();
     let cachedCampaigns = {};
 
     async function scanAndInjectWidgets() {
-      // Visibility Checks
+      // ✨ BULLETPROOF HELPER: Safely decodes language URLs without crashing
+      function safeDecode(str) {
+        try {
+          return decodeURIComponent(str);
+        } catch (e) {
+          return str; 
+        }
+      }
+
       const isProductPage = window.location.pathname.includes('/products/');
       if (isProductPage && !config.showOnRelated) return;
       if (!isProductPage && !config.showOnCollection) return;
@@ -187,7 +198,7 @@
       productLinks.forEach(link => {
         const match = link.href.match(/\/products\/([^?#]+)/);
         if (match && match[1]) {
-          const handle = match[1];
+          const handle = safeDecode(match[1]); 
           if (!fetchedHandles.has(handle)) handlesToFetch.add(handle);
         }
       });
@@ -195,7 +206,7 @@
       if (handlesToFetch.size > 0) {
         try {
           const handlesQuery = Array.from(handlesToFetch).join(',');
-          const response = await fetch(`/apps/gbs/storefront?handles=${handlesQuery}`);
+          const response = await fetch(`/apps/gbs/storefront?handles=${handlesQuery}&_t=${Date.now()}`);
           const data = await response.json();
           
           Object.assign(cachedCampaigns, data.activeCampaignsByHandle || {});
@@ -208,9 +219,12 @@
 
       productLinks.forEach(link => {
         const match = link.href.match(/\/products\/([^?#]+)/);
-        const handle = match ? match[1] : null;
+        const handle = match ? safeDecode(match[1]) : null;
 
-        if (handle && window.location.pathname.includes(`/products/${handle}`)) return; 
+        // ✨ THE FIX: Decode the browser URL so Chinese characters match perfectly!
+        const decodedPath = safeDecode(window.location.pathname);
+        if (handle && decodedPath.includes(`/products/${handle}`)) return; 
+        if (link.closest('cart-drawer, .cart-drawer, #CartDrawer, mini-cart, .ajax-cart, cart-items, .cart-item')) return;
 
         if (handle && cachedCampaigns[handle]) {
           const campaignDetails = cachedCampaigns[handle];
@@ -219,25 +233,22 @@
           // --- THE FLOATING BADGE ---
           if (hasImage && config.enableBadge && !link.querySelector('.gbs-floating-badge')) {
             link.style.position = 'relative';
-            link.style.display = link.style.display === 'inline' ? 'inline-block' : link.style.display; 
-
+            link.style.display = link.style.display === 'inline' ? 'inline-block' : link.style.display;
+            
             const badge = document.createElement('div');
             badge.className = 'gbs-floating-badge';
-            
-            // ✨ Pulls translation directly from JSON dictionaries
             badge.innerText = "{{ 'general.floating_badge_text' | t | escape }}";
             
             Object.assign(badge.style, {
               position: 'absolute', top: '8px', left: '8px',
-              background: config.badgeBg, 
-              color: '{{ block.settings.badge_text_color }}',
-              border: config.badgeBorder,
-              borderRadius: config.badgeRadius,
+              background: config.badgeBg, color: '{{ block.settings.badge_text_color }}',
+              border: config.badgeBorder, borderRadius: config.badgeRadius,
               fontWeight: config.badgeTextStyle === 'bold' ? 'bold' : 'normal',
               fontStyle: config.badgeTextStyle === 'italic' ? 'italic' : 'normal',
               padding: '4px 8px', fontSize: '12px', zIndex: '10', pointerEvents: 'none', 
-              boxShadow: config.badgeShadow // ✨ Applies the dynamic shadow
+              boxShadow: config.badgeShadow 
             });
+            
             link.appendChild(badge);
           }
 
@@ -285,11 +296,9 @@
 
                 if (now < startTime) {
                   distance = startTime - now;
-                  // ✨ Pulls translation directly from JSON dictionaries
                   prefix = "{{ 'general.floating_starts_in' | t | escape }} ";
                 } else if (now < endTime) {
                   distance = endTime - now;
-                  // ✨ Pulls translation directly from JSON dictionaries
                   prefix = "{{ 'general.floating_ends_in' | t | escape }} ";
                 } else {
                   clearInterval(interval);

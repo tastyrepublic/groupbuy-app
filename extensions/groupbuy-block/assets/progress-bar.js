@@ -35,6 +35,7 @@ function storeUnsubscribe(container, unsubscribe) {
 function toggleNativeElements(container, hide) {
   try {
     const shouldHide = container.dataset.hideNative === 'true';
+    const parentScope = container.closest('.shopify-section, .product-info, .product-block') || document;
     
     const selectors = [
       '.product-form__buttons', 
@@ -50,7 +51,7 @@ function toggleNativeElements(container, hide) {
       'label[for^="Quantity-"]' 
     ].join(', ');
     
-    const elements = document.querySelectorAll(selectors);
+    const elements = parentScope.querySelectorAll(selectors);
     
     elements.forEach(el => {
       if (el.closest('.gb-widget')) return;
@@ -69,11 +70,26 @@ function toggleNativeElements(container, hide) {
       }
     });
 
-    const qtyInputs = document.querySelectorAll('input[name="quantity"]');
+    const qtyInputs = parentScope.querySelectorAll('input[name="quantity"]');
+    
     qtyInputs.forEach(input => {
       if (input.closest('.gb-widget')) return; 
       
-      const wrapper = input.closest('div, fieldset, quantity-input');
+      // ✨ 1. Check for extended standard Shopify class names
+      let wrapper = input.closest('quantity-input, fieldset, .quantity, .product-form__quantity, .quantity-wrapper, .product-quantity, .qty-container, .qty-wrapper, [class*="quantity-selector"], [class*="qty-selector"]');
+      
+      // ✨ 2. THE SMART FIX: If no standard class is found, check the immediate parent.
+      // If the parent only holds a few elements (e.g., minus button, input, plus button), 
+      // it is the container! Hide it safely without touching product photos!
+      if (!wrapper && input.parentElement) {
+        const parent = input.parentElement;
+        if (parent.children.length <= 5 && parent.tagName !== 'FORM') {
+          wrapper = parent;
+        }
+      }
+
+      if (!wrapper) wrapper = input;
+
       if (wrapper && wrapper !== document.body) {
         if (hide && shouldHide) {
           if (!wrapper.dataset.gbOriginalDisplay) {
