@@ -275,7 +275,13 @@
                 color: '{{ block.settings.timer_color }}', 
                 fontWeight: config.timerTextStyle === 'bold' ? 'bold' : 'normal', 
                 fontStyle: config.timerTextStyle === 'italic' ? 'italic' : 'normal',
-                textAlign: 'left' 
+                textAlign: 'left',
+                // ✨ THE FIX: Force a single line with an ellipsis (...) if it runs out of space
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                maxWidth: '100%',
+                display: 'block'
               });
 
               if (priceElement && priceElement.parentNode) {
